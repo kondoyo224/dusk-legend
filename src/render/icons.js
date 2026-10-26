@@ -1,6 +1,6 @@
 // UI 지원: 아이템 아이콘, 스킬 아이콘, 초상화. 32x32 단위 좌표로 그려 size 로 확대, (id,size)별 캐시. 소유: 워커 A.
 import { makeCanvas, shade, rgba, ellipse, roundRect, LRU } from './util.js';
-import { WEAPONS, ARMOR, SHIELDS, HELMS, BOOTS } from './rig.js';
+import { WEAPONS, ARMOR, SHIELDS, HELMS, BOOTS, HUMANOID_BODIES } from './rig.js';
 import { drawLookAt, isHumanoid, lookKey } from './sprites.js';
 import { pixelize } from './pixel.js';
 
@@ -334,14 +334,14 @@ export function drawPortrait(ctx, look, x, y, size) {
     c = makeCanvas(N, N);
     const g = c.getContext('2d');
     if (isHumanoid(body)) {
-      const sc = N / 34;
-      drawLookAt(g, { ...look, scale: 1 }, N / 2, N + 12 * sc, sc, 4, 'idle', 0.25);
+      const sc = N / 30, hgt = (HUMANOID_BODIES[body]?.height ?? (look.gender === 'f' ? 0.96 : 1)), hun = HUMANOID_BODIES[body]?.hunch ?? 0;
+      const headZ = 37 * 1.06 * hgt + 8.8 - hun * 5; // 머리 중심 높이 → 초상화 0.53 지점
+      drawLookAt(g, { ...look, scale: 1 }, N / 2, N * 0.53 + headZ * sc, sc, 4, 'idle', 0.25);
     } else {
       const tall = { wolf: 38, boar: 34, rat: 22, spider: 30, slime: 30, bat: 50, shade: 52, wraith: 56 }[body] ?? 48;
       const sc = N / tall;
       drawLookAt(g, { ...look, scale: 1 }, N / 2, N * (body === 'bat' ? 1.25 : 0.88), sc, 3, 'idle', 0.25);
     }
-    pixelize(c, { levels: 10, keepAlpha: body === 'shade' || body === 'wraith' });
     cache.set(key, c);
   }
   blit(ctx, c, x, y, size);

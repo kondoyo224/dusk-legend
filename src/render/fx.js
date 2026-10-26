@@ -1,12 +1,12 @@
 // 이펙트(도트풍): 비트맵 데미지 숫자, 단색 섬광, 도트 휘두름 궤적, 스킬 6종, 레벨업, 사망 소멸, 페이드, 흔들림,
 // 클릭 마커, 말풍선(박스 없는 외곽선 글자), 줍기. 월드 이펙트는 저해상도 버퍼에, 한글 글자는 메인 캔버스에. 소유: 워커 A.
 import { tileToWorld, DIRS } from '../core/iso.js';
-import { rgba, clamp, shade, easeOut } from './util.js';
+import { rgba, clamp, shade, easeOut, fxRand } from './util.js';
 import { flame } from './tiles.js';
 import { FONT_PIX, bitmapText, isBitmapText, outlinedText, pxEllipse, pxFillEllipse, pxLine, pxDitherDiamond } from './pixel.js';
 
 export const FONT_KO = FONT_PIX;
-const R = Math.random;
+const R = fxRand;
 
 const ent = (e) => tileToWorld(e.rx ?? e.x, e.ry ?? e.y);
 // 방향 단위벡터(화면)

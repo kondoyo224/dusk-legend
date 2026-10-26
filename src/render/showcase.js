@@ -34,7 +34,7 @@ export class Showcase {
     this.off = null;
     const root = document.getElementById('ui-root');
     if (root) root.style.display = 'none';
-    window.addEventListener('keydown', (e) => { const n = +e.key; if (n >= 1 && n <= 5) this.page = n; });
+    window.addEventListener('keydown', (e) => { const n = +e.key; if (n >= 1 && n <= 8) this.page = n; });
   }
 
   render(main, dt, time) {
@@ -57,7 +57,7 @@ export class Showcase {
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     ctx.fillStyle = '#16141c'; ctx.fillRect(0, 0, W, H);
     text(ctx, `쇼케이스 ${this.page}/5  (숫자키 1~5: 인간형 / 몬스터 / 지면 / 오브젝트 / 아이콘)`, 12, 20, '#c8c0a0', 13, 'left');
-    [this.humans, this.monsters, this.grounds, this.objects, this.icons][this.page - 1]?.call(this, ctx, time, W, H);
+    [this.humans, this.monsters, this.grounds, this.objects, this.icons, this.closeHumans, this.closeMonsters, this.closeObjects][this.page - 1]?.call(this, ctx, time, W, H);
   }
 
   humans(ctx, time) {
@@ -107,9 +107,38 @@ export class Showcase {
     text(ctx, 'grimfang (scale 1.7, tint)', 1150, 680, '#c8c0a0', 11);
   }
 
+  // 6/7: 확대 근접 확인 (&row=시작 행, &st=상태, &k=진행도) — 4배 최근접
+  closeHumans(ctx, time) {
+    const q = new URLSearchParams(location.search), r0 = +(q.get('row') || 0), st = q.get('st') || 'idle', k = +(q.get('k') || 0.3);
+    HUMANS.slice(r0, r0 + 3).forEach((h, row) => {
+      [4, 3, 2, 1, 0, 5].forEach((d, i) => this.sprite(ctx, h.look, d, st, k, 60 + i * 200, 250 + row * 250, h.ghost, 3));
+    });
+  }
+  closeMonsters(ctx, time) {
+    const q = new URLSearchParams(location.search), r0 = +(q.get('row') || 0), st = q.get('st') || 'idle', k = +(q.get('k') || 0.3);
+    BODIES.slice(r0, r0 + 6).forEach((b, i) => {
+      [3, 5, 7].forEach((d, j) => this.sprite(ctx, { body: b }, d, st, k, 90 + (i % 3) * 400 + j * 120, 260 + Math.floor(i / 3) * 300, false, 2.5));
+    });
+  }
+
+  closeObjects(ctx, time) {
+    const q = new URLSearchParams(location.search);
+    const ids = (q.get('ids') || 'statue,gravestone,fence,torch,lamp_post,crystal,dead_tree,stairs_up,stairs_down,flowers,mushroom,bones,cobweb,rubble,portal_glow,altar,sign,brazier').split(',');
+    ids.forEach((id, i) => {
+      const X = 50 + (i % 6) * 104, Y = 92 + Math.floor(i / 6) * 118;
+      ctx.save(); ctx.scale(2, 2); ctx.imageSmoothingEnabled = false;
+      drawGroundTile(ctx, i % 3 === 0 ? 'stone_floor' : i % 3 === 1 ? 'grass' : 'dirt', X, Y, i, 0, null);
+      const s = objectSprite(id, i, 0, null);
+      ctx.drawImage(s.canvas, X - s.ax, Y - s.ay);
+      if (ANIMATED_OBJECTS.has(id)) drawObjectAnim(ctx, id, X, Y, i, 0, time);
+      ctx.restore();
+      text(ctx, id, X * 2, Y * 2 + 44, '#c8c0a0', 11);
+    });
+  }
+
   sprite(ctx, look, dir, state, k, x, y, ghost, zoom = 1) {
     const s = getSprite(look, dir, state, k, 0);
-    ctx.save(); ctx.translate(x, y); ctx.scale(zoom, zoom);
+    ctx.save(); ctx.translate(x, y); ctx.scale(zoom, zoom); ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(0, 1, 14 * (look.scale ?? 1), 6 * (look.scale ?? 1), 0, 0, Math.PI * 2); ctx.fill();
     if (ghost) { ctx.globalAlpha = 0.68; ctx.drawImage(getVariant(s, 'ghost'), -s.ax, -s.ay); }
     else ctx.drawImage(s.canvas, -s.ax, -s.ay);

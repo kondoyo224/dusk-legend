@@ -47,15 +47,15 @@ export function pixelize(canvas, opt = {}) {
 
 // 선택적 외곽선: 투명 픽셀 중 불투명 이웃(4방향)이 있으면 그 이웃의 어두운 같은 계열 색.
 // 빛(좌상단)을 받는 쪽 = 이웃이 오른쪽/아래에 있는 외곽 픽셀 → 옅게. 계단 모서리는 반투명 AA.
-function outlinePass(d, w, h, fixed) {
+export function outlinePass(d, w, h, fixed, th = 150, keepSemi = false) {
   const mask = new Uint8Array(w * h);
-  for (let p = 0; p < w * h; p++) mask[p] = d[p * 4 + 3] >= 150 ? 1 : 0;
+  for (let p = 0; p < w * h; p++) mask[p] = d[p * 4 + 3] >= th ? 1 : 0;
   const F = fixed ? hexToRgb(fixed) : null;
   const o = [0, 0, 0];
   const ol = new Uint8Array(w * h);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const p = y * w + x;
-    if (mask[p]) continue;
+    if (mask[p] || (keepSemi && d[p * 4 + 3] > 0)) continue;
     let n = -1, soft = false;
     if (y < h - 1 && mask[p + w]) { n = p + w; soft = true; }          // 위쪽 외곽 (빛 받음)
     else if (x < w - 1 && mask[p + 1]) { n = p + 1; soft = true; }     // 왼쪽 외곽 (빛 받음)
@@ -71,7 +71,7 @@ function outlinePass(d, w, h, fixed) {
   // 손 AA: 외곽선 계단의 안쪽 모서리(두 직교 이웃이 외곽선)에 반투명 중간 픽셀
   for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
     const p = y * w + x;
-    if (mask[p] || ol[p]) continue;
+    if (mask[p] || ol[p] || (keepSemi && d[p * 4 + 3] > 0)) continue;
     const L = ol[p - 1], Rr = ol[p + 1], U = ol[p - w], D = ol[p + w];
     let n = -1;
     if (L && U) n = p - 1; else if (Rr && U) n = p + 1; else if (L && D) n = p - 1; else if (Rr && D) n = p + 1;

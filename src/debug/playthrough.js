@@ -180,19 +180,20 @@ class Tester {
     return findPath(p.x, p.y, tx, ty, (fx, fy, nx, ny) => w.canStep(fx, fy, nx, ny, p, !avoid) && w.blockerAt(nx, ny, p)?.kind !== 'npc', { maxNodes: 20000, allowAdjacent: adjacent });
   }
   // 경로를 따라 한 칸씩: 트리거·포탈 발동, 대화/컷신이 열리면 끝날 때까지 진행. 맵이 바뀌면 멈춤.
-  async walk(tx, ty, { adjacent = false, label, avoid = false } = {}) {
+  async walk(tx, ty, { adjacent = false, label, avoid = false, retry = false } = {}) {
     const g = this.g, p = g.player, map0 = g.state.map;
     const path = this.path(tx, ty, adjacent, avoid) || (avoid ? this.path(tx, ty, adjacent) : null);
-    if (path) this._rewalk = 0;
+    // 재시도 횟수는 최초 호출에서만 초기화 (재귀 재탐색 사이에 유지 — 매번 0으로 돌리면 무한 재귀)
+    if (!retry) this._rewalk = 0;
     if (!path) return this.fail(label ?? `walk ${map0}(${tx},${ty})`, `경로 없음 from (${p.x},${p.y})`);
     for (const s of path) {
       // NPC 가 길을 막고 있으면 비켜 갈 수 있도록 재탐색
-      if (g.world.blockerAt(s.x, s.y, p)?.kind === 'npc') { if ((this._rewalk = (this._rewalk || 0) + 1) > 20) return this.fail(label ?? 'walk', 'NPC 가 길을 막음'); return this.walk(tx, ty, { adjacent, label }); }
+      if (g.world.blockerAt(s.x, s.y, p)?.kind === 'npc') { if ((this._rewalk = (this._rewalk || 0) + 1) > 20) return this.fail(label ?? 'walk', 'NPC 가 길을 막음'); return this.walk(tx, ty, { adjacent, label, retry: true }); }
       // 길을 막은 몬스터는 베고 지나간다 (같은 칸에 겹치지 않도록)
       const blk = g.world.blockerAt(s.x, s.y, p);
       if (blk?.kind === 'monster' && blk.boss) {
         if ((this._rewalk = (this._rewalk || 0) + 1) > 20) return this.fail(label ?? 'walk', `보스 ${blk.monsterId} 가 길을 막음`);
-        return this.walk(tx, ty, { adjacent, label, avoid: true });   // 보스는 베지 않고 돌아간다
+        return this.walk(tx, ty, { adjacent, label, avoid: true, retry: true });   // 보스는 베지 않고 돌아간다
       }
       if (blk?.kind === 'monster') { this.killing = blk; g.systems.combat.kill(blk, p); this.killing = null; }
       else if (blk) return this.fail(label ?? 'walk', `(${s.x},${s.y}) ${blk.kind} 가 길을 막음`);

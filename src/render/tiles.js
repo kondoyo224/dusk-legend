@@ -4,10 +4,12 @@ import { hash2, shade, mix, rgba, makeCanvas, diamondPath, ellipse, seeded, LRU 
 import { pixelize, pxEllipse, pxLine, pxDitherDiamond } from './pixel.js';
 import { bakeGround, bakeCliffs } from './groundpx.js';
 import { PB, leafBall, canopy, trunk, boxPx, boulder, column, R, rc, ih, vnoise } from './objpx.js';
+import { PROPS, altarDeco } from './props.js';
 // 지면에 납작하게 구워지는 장식(외곽선 없이)
 const FLAT_PIX = new Set(['flowers', 'mushroom', 'bones', 'cobweb', 'rubble', 'stairs_down', 'stairs_up', 'portal_glow']);
 // 픽셀 셰이더로 직접 램프 색을 찍는 오브젝트 (톤 매핑 생략, 외곽선만)
-const PX_OBJ = new Set(['wall_stone', 'wall_wood', 'wall_crypt', 'wall_marble', 'tree', 'pine', 'bush', 'rock', 'pillar', 'crate', 'barrel', 'table', 'bookshelf', 'bed', 'anvil', 'well', 'chest', 'altar', 'shrine']);
+const PX_OBJ = new Set(['wall_stone', 'wall_wood', 'wall_crypt', 'wall_marble', 'tree', 'pine', 'bush', 'rock', 'pillar', 'crate', 'barrel', 'table', 'bookshelf', 'bed', 'anvil', 'well', 'chest', 'altar', 'shrine',
+  'fence', 'torch', 'brazier', 'lamp_post', 'crystal', 'statue', 'gravestone', 'dead_tree', 'stairs_down', 'stairs_up', 'portal_glow', 'flowers', 'mushroom', 'bones', 'cobweb', 'rubble', 'sign']);
 
 export const HW = 32, HH = 16;
 export const WALL_H = 76;
@@ -488,8 +490,7 @@ const OBJ = {
     boxPx(pb, cx, cy, 28, 14, 6, R.mist, { top: 5.4, left: 4.2, right: 2.6, seed: 16 });
     boxPx(pb, cx, cy, 22, 11, 18, R.mist, { z: 6, top: 6.4, left: 5, right: 3, seed: 17, face: (f, x, y, s, hh) => (hh % 6 < 0.9 ? -1.6 : (s * 22) % 11 < 0.9 ? -1.2 : 0), topFace: (u, v) => { const d = Math.abs(u - 0.5) + Math.abs(v - 0.5); return (d > 0.3 && d < 0.36) || d < 0.08 ? 3 : 0; } });
     pb.flush();
-    ctx.fillStyle = 'rgba(214,196,255,0.85)';
-    for (let i = 0; i < 3; i++) { ctx.fillRect(cx - 18 + i * 6, cy - 13 + i * 3, 2, 4); ctx.fillRect(cx + 6 + i * 6, cy - 7 - i * 3, 2, 4); }
+    altarDeco(ctx, cx, cy);
   },
   shrine(ctx, cx, cy) {
     shadowBlob(ctx, cx + 3, cy + 3, 28, 12, 0.5);
@@ -572,6 +573,9 @@ const OBJ = {
   },
 };
 
+// ★A11: 소품은 픽셀 직접 묘사판으로 교체 (props.js)
+Object.assign(OBJ, PROPS);
+
 // 스프라이트 캔버스 크기(타일 중심 기준 위/아래 여백)
 const TALL_UP = { tree: 140, pine: 160, dead_tree: 120, pillar: 110, statue: 100, shrine: 100, lamp_post: 90, crystal: 70, well: 72, bookshelf: 90, torch: 60 };
 export function objectTop(id) { return TALL_UP[id] ?? (WALLS[id] || id === 'wall_spirit' ? WALL_H + 20 : 50); }
@@ -588,10 +592,15 @@ function nbMask(world, gx, gy, id) {
 const objCache = new LRU(800);
 export function clearObjectCache() { objCache.clear(); }
 // 캐시된 오브젝트 스프라이트 {canvas, ax, ay}
-export function objectSprite(id, gx, gy, world) {
+function objKey(id, gx, gy, world) {
   const variant = WALLS[id] || id === 'wall_spirit' ? (hash2(gx, gy, 5) * 6) | 0 : (hash2(gx, gy, 5) * 4) | 0;
   const mask = nbMask(world, gx, gy, id);
-  const key = `${id}|${variant}|${mask}`;
+  return [`${id}|${variant}|${mask}`, variant, mask];
+}
+// 이미 구워진 스프라이트만 (없으면 null) — 렌더러가 프레임 예산 안에서 굽기 순서를 정할 때
+export function objectSpriteReady(id, gx, gy, world) { return objCache.get(objKey(id, gx, gy, world)[0]) || null; }
+export function objectSprite(id, gx, gy, world) {
+  const [key, variant, mask] = objKey(id, gx, gy, world);
   let s = objCache.get(key);
   if (s) return s;
   const up = objectTop(id), W = id === 'tree' ? 160 : 120, H = up + 40;
@@ -602,7 +611,7 @@ export function objectSprite(id, gx, gy, world) {
   (OBJ[id] || OBJ.rock)(ctx, ax, ay, r, gx, gy, nb);
   // 도트화: 벽은 이어 붙으므로 외곽선 없음, 영혼 장벽은 반투명 유지
   const wall = !!WALLS[id] || id === 'wall_spirit';
-  pixelize(c, { tone: !PX_OBJ.has(id), outline: !wall && !FLAT_PIX.has(id), keepAlpha: id === 'wall_spirit' || id === 'portal_glow' || id === 'cobweb', shadow: true, alphaCut: id === 'wall_spirit' ? 20 : FLAT_PIX.has(id) ? 60 : 110, midAlpha: id === 'wall_spirit' ? 110 : 150 });
+  pixelize(c, { tone: !PX_OBJ.has(id), outline: !wall && !FLAT_PIX.has(id), keepAlpha: id === 'wall_spirit' || id === 'portal_glow' || id === 'cobweb', shadow: true, alphaCut: id === 'wall_spirit' ? 20 : FLAT_PIX.has(id) ? 100 : 110, midAlpha: id === 'wall_spirit' ? 110 : 150 });
   s = { canvas: c, ax, ay, w: W, h: H };
   return objCache.set(key, s);
 }

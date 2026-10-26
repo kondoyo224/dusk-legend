@@ -86,3 +86,7 @@ export function limb(ctx, x1, y1, x2, y2, w, color) {
 export const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 export const lerp = (a, b, t) => a + (b - a) * t;
 export const easeOut = (t) => 1 - (1 - t) * (1 - t);
+
+// 렌더 전용 난수 (게임플레이의 Math.random 순서를 건드리지 않도록 분리)
+let _fxs = 0x9e3779b9;
+export function fxRand() { _fxs ^= _fxs << 13; _fxs ^= _fxs >>> 17; _fxs ^= _fxs << 5; return (_fxs >>> 0) / 4294967296; }

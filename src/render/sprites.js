@@ -1,6 +1,7 @@
 // 엔티티 스프라이트: look → 리그/짐승 그리기, 프레임 양자화 + LRU 캐시, 섬광/혼/외곽선 변형. 소유: 워커 A.
 import { makeCanvas, LRU, clamp, easeOut } from './util.js';
 import { pixelize } from './pixel.js';
+import { Sheet } from './spx.js';
 import { drawRig, poseOf, humanStyle, humanoidStyle, tintStyle, HUMANOID_BODIES } from './rig.js';
 import { drawBeast, BEAST_BODIES, FLYING } from './beasts.js';
 
@@ -72,14 +73,15 @@ export function getSprite(look, dir, state, k, time = 0) {
     ctx.scale(1, 1 - t * 0.15);
   }
   const st = isHumanoid(body) ? styleFor(look) : null;
-  if (st) drawRig(ctx, 0, 0, dir, pose, st);
-  else if (BEAST_BODIES.has(body)) drawBeast(ctx, 0, 0, body, dir, pose, look, kk * 6.28);
-  else drawRig(ctx, 0, 0, dir, pose, humanStyle(look));
+  const S = new Sheet(ctx);
+  if (st) drawRig(S, 0, 0, dir, pose, st);
+  else if (BEAST_BODIES.has(body)) drawBeast(S, 0, 0, body, dir, pose, look, kk * 6.28);
+  else drawRig(S, 0, 0, dir, pose, humanStyle(look));
   ctx.restore();
-  // 반투명 내부선(INLINE)은 실루엣 밖에서 알파 컷(150)으로 지워지고, 선택적 컬러 외곽선이 대신 둘러진다
-  pixelize(c, { keepAlpha: SHEER.has(body), alphaCut: SHEER.has(body) ? 110 : 150 });
-  // 히트박스용 상단 높이(대략) — 고전 비율(짧은 몸 + 큰 머리)
-  const top = (BEAST_BODIES.has(body) ? (body === 'wolf' || body === 'boar' ? 30 : body === 'rat' ? 16 : body === 'spider' ? 22 : body === 'slime' ? 22 : body === 'bat' ? 44 : 52) : 56 * (st?.height ?? 1)) * sc;
+  // 재질 영역 → 손도트 명암·질감·1px 디테일 → 선택적 컬러 외곽선 (spx.js)
+  S.bake({ outlineAlpha: SHEER.has(body) ? 150 : null });
+  // 히트박스용 상단 높이(대략)
+  const top = (BEAST_BODIES.has(body) ? (body === 'wolf' || body === 'boar' ? 32 : body === 'rat' ? 17 : body === 'spider' ? 22 : body === 'slime' ? 24 : body === 'bat' ? 44 : 54) : 60 * (st?.height ?? 1)) * sc;
   s = { canvas: c, ax, ay, top, w: W, h: H, sc };
   return cache.set(key, s);
 }
@@ -116,8 +118,10 @@ export function drawLookAt(ctx, look, x, y, scale, dir = 4, state = 'idle', k = 
   const body = look.body || 'human';
   const pose = poseOf(state, k);
   ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale);
+  const S = new Sheet(ctx);
   const st = isHumanoid(body) ? styleFor(look) : null;
-  if (st) drawRig(ctx, 0, 0, dir, pose, st);
-  else drawBeast(ctx, 0, 0, body, dir, pose, look, 0);
+  if (st) drawRig(S, 0, 0, dir, pose, st);
+  else drawBeast(S, 0, 0, body, dir, pose, look, 0);
   ctx.restore();
+  S.bake({ outlineAlpha: SHEER.has(body) ? 150 : null });
 }

@@ -1,7 +1,7 @@
 // 지면 청크 캐시: 8x8 타일 단위로 지면(픽셀 셰이더, groundpx.js)+평평한 오브젝트를 오프스크린 캔버스에 1× 로 굽는다. 소유: 워커 A.
 import { tileToWorld } from '../core/iso.js';
 import { makeCanvas } from './util.js';
-import { ANIMATED_GROUND, objectSprite, ANIMATED_OBJECTS, HW, HH, objectTop } from './tiles.js';
+import { ANIMATED_GROUND, objectSprite, ANIMATED_OBJECTS, HW, HH, objectTop, GROUND } from './tiles.js';
 import { bakeGround, bakeCliffs } from './groundpx.js';
 
 const CS = 8;
@@ -89,19 +89,45 @@ export class GroundLayer {
     return out;
   }
 
-  // 곧 보일 청크(화면 주변 margin px)를 프레임당 n 개씩 미리 굽는다 → 걸어갈 때 끊김 방지
-  prefetch(vx0, vy0, vx1, vy1, margin = 260, n = 1) {
+  // 곧 보일 청크(화면 주변 margin px)를 시간 예산 안에서 미리 굽는다 → 걸어갈 때 끊김 방지
+  prefetch(vx0, vy0, vx1, vy1, margin = 260, budget = 6) {
+    const t0 = performance.now();
     for (const m of this.visible(vx0 - margin, vy0 - margin, vx1 + margin, vy1 + margin)) {
       if (m.canvas) continue;
       this.build(m);
-      if (--n <= 0) return;
+      if (performance.now() - t0 > budget) return;
     }
   }
 
-  draw(ctx, list) {
+  /**
+   * 청크 그리기. 화면(sx0..sy1)에 실제로 걸친 미완성 청크만, 화면 중앙에 가까운 것부터 시간 예산(ms) 안에서 굽는다.
+   * 예산을 넘긴 청크는 이번 프레임에 타일 바탕색 마름모(임시)로 그리고 다음 프레임들에 나눠 굽는다 (맵 첫 프레임 멈춤 방지).
+   */
+  draw(ctx, list, scr, budget = 1e9) {
+    if (scr) {
+      const [sx0, sy0, sx1, sy1] = scr, cx = (sx0 + sx1) / 2, cy = (sy0 + sy1) / 2;
+      const need = list.filter((m) => !m.canvas && !(m.maxX < sx0 || m.minX > sx1 || m.maxY < sy0 || m.minY > sy1));
+      need.sort((a, b) => Math.hypot((a.minX + a.maxX) / 2 - cx, (a.minY + a.maxY) / 2 - cy) - Math.hypot((b.minX + b.maxX) / 2 - cx, (b.minY + b.maxY) / 2 - cy));
+      const t0 = performance.now();
+      for (const m of need) { if (performance.now() - t0 > budget) break; this.build(m); }
+      this.pending = need.some((m) => !m.canvas);
+    }
     for (const m of list) {
-      if (!m.canvas) this.build(m);
-      ctx.drawImage(m.canvas, m.minX, m.minY);
+      if (m.canvas) ctx.drawImage(m.canvas, m.minX, m.minY);
+      else if (scr) this.placeholder(ctx, m);
+      else { this.build(m); ctx.drawImage(m.canvas, m.minX, m.minY); }
+    }
+  }
+
+  // 임시 바탕: 타일마다 지면 기본색 마름모 (몇 프레임만 보인다)
+  placeholder(ctx, m) {
+    const w = this.world;
+    for (let y = m.y0; y <= m.y1; y++) for (let x = m.x0; x <= m.x1; x++) {
+      const g = w.groundAt(x, y), c = GROUND[g];
+      if (!c || c.none) continue;
+      const px = (x - y) * HW, py = (x + y) * HH;
+      ctx.fillStyle = c.c;
+      ctx.beginPath(); ctx.moveTo(px, py - HH - 0.5); ctx.lineTo(px + HW + 0.5, py); ctx.lineTo(px, py + HH + 0.5); ctx.lineTo(px - HW - 0.5, py); ctx.closePath(); ctx.fill();
     }
   }
 }

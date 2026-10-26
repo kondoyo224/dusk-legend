@@ -142,10 +142,35 @@ const SH = {
       if (e < 0.04) return rc(R.carpet, 1);
       return rc(R.gold, e < 0.09 ? 5 : e < 0.12 ? 3 : 2);
     }
-    let t = 4 + ((Math.floor(wx) + Math.floor(wy)) & 1 ? 0.3 : -0.3) + (vnoise(wx, wy, 20, 31) - 0.5) * 1.6;
-    const dm = Math.abs(lu - 0.5) + Math.abs(lv - 0.5);
-    if (dm > 0.26 && dm < 0.31) return rc(R.gold, 2);
-    if (dm < 0.08) return rc(R.gold, 4 + (dm < 0.04 ? 1 : 0));
+    // 직조 바탕 + 마름모 격자 무늬 + 타일마다 8잎 장미 문양(메달리온)과 점 고리
+    let t = 4 + (vnoise(wx, wy, 20, 31) - 0.5) * 1.4 + (vnoise(wx * 3, wy, 2, 33) - 0.5) * 0.9;
+    const du = lu - 0.5, dv = lv - 0.5, rr = Math.hypot(du, dv), ang = Math.atan2(dv, du);
+    // 메달리온 테두리(물결 고리)
+    const ring = 0.33 + 0.025 * Math.cos(ang * 8);
+    if (Math.abs(rr - ring) < 0.022) return rc(R.gold, Math.round(3 + (du + dv < 0 ? 1 : 0)));
+    if (Math.abs(rr - ring) < 0.04) return rc(R.carpet, 1);
+    if (rr < ring) {
+      const petal = 0.2 + 0.07 * Math.cos(ang * 8);
+      if (rr < 0.045) return rc(R.carpet, 7);                                   // 중심 보석
+      if (rr < 0.075) return rc(R.gold, 6);
+      if (rr < petal) {                                                         // 꽃잎 (안쪽 밝게, 잎맥 어둡게)
+        if (Math.abs(Math.sin(ang * 4)) < 0.1 && rr > 0.09) return rc(R.carpet, 2);
+        return rc(R.gold, Math.round(5.4 - rr * 12 + (du + dv < 0 ? 0.8 : -0.4)));
+      }
+      if (rr < petal + 0.025) return rc(R.carpet, 1);
+      // 꽃잎 사이 작은 점 8개
+      const a8 = ((ang / (Math.PI / 4)) % 1 + 1) % 1;
+      if (Math.abs(rr - 0.27) < 0.025 && Math.abs(a8 - 0.5) < 0.12) return rc(R.gold, 4);
+      t -= 1.1;                                                                 // 메달리온 안 바탕은 진하게
+    } else {
+      // 바깥 바탕: 대각 격자 (타일 경계를 따라 이어지는 마름모)
+      const g1 = ((lu + lv) * 2) % 1, g2 = ((lu - lv + 2) * 2) % 1;
+      if (g1 < 0.035 || g2 < 0.035) t -= 1.4;
+      else if (g1 < 0.06 || g2 < 0.06) t += 0.8;
+      // 모서리 꽃봉오리
+      const cdist = Math.min(Math.hypot(lu, lv), Math.hypot(1 - lu, lv), Math.hypot(lu, 1 - lv), Math.hypot(1 - lu, 1 - lv));
+      if (cdist < 0.07) return rc(R.gold, cdist < 0.035 ? 5 : 3);
+    }
     return rc(R.carpet, Math.round(t));
   },
   water(wx, wy) {

@@ -6,7 +6,7 @@
 import { tileToWorld, worldToTileF, TILE_W, TILE_H } from '../core/iso.js';
 import { TILES } from '../data/tiles.js';
 import { GroundLayer, FLAT_OBJECTS } from './ground.js';
-import { objectSprite, drawObjectAnim, drawGroundAnim, ANIMATED_OBJECTS, clearObjectCache, objectTop } from './tiles.js';
+import { objectSprite, objectSpriteReady, drawObjectAnim, drawGroundAnim, ANIMATED_OBJECTS, clearObjectCache, objectTop } from './tiles.js';
 import { getSprite, getVariant, animOf, isHumanoid, FLYING, DEAD_T, clearSpriteCache } from './sprites.js';
 import { Lighting } from './lighting.js';
 import { FX } from './fx.js';
@@ -55,6 +55,7 @@ export class Renderer {
   }
 
   onMap(world) {
+    this._mapFrame = 0; this._peak = 0; this._gFrame = 0;
     this.ground.reset(world);
     this.lighting.setMap(world.map);
     this.occl.clear();
@@ -153,9 +154,17 @@ export class Renderer {
   render(dt) {
     if (!this.dbg) return this._render(dt);
     const t0 = performance.now();
+    const fresh = this._mapFrame === 0;
     this._render(dt);
-    (this._ms = this._ms || []).push(Math.round(performance.now() - t0));
+    const ms = Math.round(performance.now() - t0);
+    (this._ms = this._ms || []).push(ms);
     if (this._ms.length > 12) this._ms.shift();
+    // 맵 로드 직후 첫 프레임들 시간 (첫 프레임 멈춤 측정: first = 첫 render, peak = 첫 30프레임 최대)
+    if (this._mapFrame != null && this._mapFrame < 30 && this.game.scene === 'play') {
+      if (fresh) this._first = ms;
+      this._peak = Math.max(this._peak || 0, ms);
+      this._mapFrame++;
+    }
   }
 
   _render(dt) {
@@ -185,8 +194,12 @@ export class Renderer {
     const vx0 = -ox - 64, vx1 = -ox + bw + 64;
     const vy0 = -oy - 32, vy1 = -oy + bh + 160;
     const chunks = this.ground.visible(vx0, vy0, vx1, vy1);
-    this.ground.draw(b, chunks);
-    this.ground.prefetch(vx0, vy0, vx1, vy1);
+    // 맵 첫 프레임 멈춤 방지: 화면 중앙 청크부터 시간 예산 안에서 굽고 나머지는 다음 프레임들로 분산
+    const firstF = (this._gFrame = (this._gFrame ?? 0) + 1) === 1;
+    const tg0 = performance.now();
+    this.ground.draw(b, chunks, [-ox, -oy, -ox + bw, -oy + bh], firstF ? 42 : 9);
+    if (!this.ground.pending) this.ground.prefetch(vx0, vy0, vx1, vy1);
+    const tg1 = performance.now();
     for (const m of chunks) {
       for (const a of m.anim) { const p = tileToWorld(a.x, a.y); if (p.x > vx0 && p.x < vx1 && p.y > vy0 && p.y < vy1) drawGroundAnim(b, a.id, p.x, p.y, a.x, a.y, time); }
       for (const a of m.flatAnim) { const p = tileToWorld(a.x, a.y); drawObjectAnim(b, a.id, p.x, p.y, a.x, a.y, time); }
@@ -211,12 +224,24 @@ export class Renderer {
       list.push({ d: this.depthOf(e), e, wx: ep.x, wy: ep.y });
     }
     list.sort((a, c) => a.d - c.d);
+    // 오브젝트 스프라이트도 같은 방식: 아직 안 구운 것은 화면 중앙에 가까운 것부터 예산 안에서
+    {
+      const cx = -ox + bw / 2, cy = -oy + bh / 2, todo = [];
+      for (const it of list) if (it.o && !objectSpriteReady(it.o.id, it.o.x, it.o.y, game.world)) todo.push(it);
+      if (todo.length) {
+        todo.sort((a, c) => Math.hypot(a.wx - cx, a.wy - cy) - Math.hypot(c.wx - cx, c.wy - cy));
+        const t0 = performance.now(), bud = firstF ? 26 : 7;
+        for (const it of todo) { if (performance.now() - t0 > bud) { it.skip = true; continue; } objectSprite(it.o.id, it.o.x, it.o.y, game.world); }
+      }
+    }
     this.frameDraw = [];
     const target = game.controller?.target;
+    const te0 = this.dbg ? performance.now() : 0;
     for (const it of list) {
-      if (it.o) this.drawObject(b, it, pDepth, pw, time, dt);
+      if (it.o) { if (!it.skip) this.drawObject(b, it, pDepth, pw, time, dt); }
       else this.drawEntity(b, it, time, target);
     }
+    if (this.dbg && this._mapFrame === 0) this._brk = { ground: Math.round(tg1 - tg0), objEnt: Math.round(performance.now() - te0) };
     const m = game.input?.mouse;
     this.hover = m?.inCanvas ? this.pickEntity(m.x, m.y) : null;
     drawProjectiles(b, this, time);
@@ -245,7 +270,7 @@ export class Renderer {
     this.fx.drawBubbles(ctx);
     this.fx.drawScreen(ctx, this.W, this.H);
     if (this.dbg && /clicktest/.test(location.search) && (this._fr || 0) >= 1) return this.clickTest();
-    if (this.dbg) { let el = document.getElementById('__state'); if (!el) { el = document.createElement('pre'); el.id = '__state'; el.style.display = 'none'; document.body.appendChild(el); } el.textContent = JSON.stringify({ fade: this.fx.fade, chunks: chunks.length, list: list.length, view: [this.viewX, this.viewY], z: this.camera.zoom, S: this.S, buf: [bw, bh], W: this.W, H: this.H, amb, dark: +this.lighting.dark.toFixed(2), gt: game.time, ms: this._ms, fr: (this._fr = (this._fr || 0) + 1), map: game.world.map.id, wh: [game.world.w, game.world.h], p: [p?.x, p?.y] }); }
+    if (this.dbg) { let el = document.getElementById('__state'); if (!el) { el = document.createElement('pre'); el.id = '__state'; el.style.display = 'none'; document.body.appendChild(el); } el.textContent = JSON.stringify({ fade: this.fx.fade, chunks: chunks.length, list: list.length, view: [this.viewX, this.viewY], z: this.camera.zoom, S: this.S, buf: [bw, bh], W: this.W, H: this.H, amb, dark: +this.lighting.dark.toFixed(2), gt: game.time, ms: this._ms, first: this._first, peak: this._peak, brk: this._brk, fr: (this._fr = (this._fr || 0) + 1), map: game.world.map.id, wh: [game.world.w, game.world.h], p: [p?.x, p?.y] }); }
   }
 
   // 디버그: ?fxdemo — 이펙트 일괄 발생 (스크린샷 확인용)

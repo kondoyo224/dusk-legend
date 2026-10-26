@@ -1,6 +1,6 @@
 // 조명/대기 (★v2): 색 있는 어둠(남보라) 오버레이 + 계단식(6단) 부드러운 광원 구멍(디더 없음),
 // 횃불 등은 따뜻한 반투명 원 5단. 모든 좌표는 월드 버퍼(1 월드px = 1 버퍼px) 기준. 소유: 워커 A.
-import { makeCanvas, rgba, mix, hash2, hexToRgb } from './util.js';
+import { makeCanvas, rgba, mix, hash2, hexToRgb, fxRand } from './util.js';
 import { tileToWorld } from '../core/iso.js';
 
 const LIGHT_PX = 36;            // 광원 반경 1타일당 버퍼 px
@@ -190,7 +190,7 @@ export class Lighting {
     }
   }
   spawn(type, x0, y0, x1, y1, anywhere) {
-    const r = Math.random;
+    const r = fxRand;
     const x = x0 + r() * (x1 - x0), y = y0 + r() * (y1 - y0);
     const life = 3 + r() * 5;
     const base = { x, y, life, max: life, seed: r() };
