@@ -2,6 +2,7 @@
 import { el, esc, iconCanvas, portraitCanvas, fmtNum, itemTooltipHtml, skillTooltipHtml, EQUIP_SLOTS, SLOT_NAME, STAT_NAME } from './dom.js';
 import { Win } from './windows.js';
 import { drawFullMap } from './minimap.js';
+import { itemSheet, equipSheet, skillSheet } from './mobile.js';
 
 // ── 가방 + 장비 ──
 const EQ_POS = { helm: [4, 0], armor: [4, 42], weapon: [4, 84], boots: [4, 126], amulet: [210, 0], ring: [210, 42], shield: [210, 84] };
@@ -9,7 +10,7 @@ const EQ_POS = { helm: [4, 0], armor: [4, 42], weapon: [4, 84], boots: [4, 126],
 export class InventoryWin extends Win {
   constructor(ui) {
     super(ui, 'inventory', {
-      title: '소지품', place: (W, H, w, h) => ({ x: W - w - 220, y: Math.max(10, H - h - 120) }),
+      title: '소지품', cls: 'invwin', place: (W, H, w, h) => ({ x: W - w - 220, y: Math.max(10, H - h - 120) }),
       events: ['inventory:changed', 'gold:changed', 'stats:changed', 'player:levelup'],
     });
   }
@@ -18,7 +19,7 @@ export class InventoryWin extends Win {
     if (!s) return;
     const b = this.body;
     b.innerHTML = `<div class="sec-title">장비</div><div class="eq"><div class="pframe"></div></div><div class="sec-title">가방</div><div class="grid inv-grid"></div>
-      <div class="invfoot"><span>골드 <span class="g">${fmtNum(s.gold)}</span></span><span class="h">클릭: 사용·장착 · 끌기: 이동/단축키/버리기</span></div>`;
+      <div class="invfoot"><span>골드 <span class="g">${fmtNum(s.gold)}</span></span><span class="h">${this.ui.mobile?.on ? '탭: 설명·사용·단축키 · 길게 누르기: 바로 사용·장착' : '클릭: 사용·장착 · 끌기: 이동/단축키/버리기'}</span></div>`;
     const eq = b.querySelector('.eq');
     eq.querySelector('.pframe').appendChild(portraitCanvas(g, g.player.look, 112));
     for (const k of EQUIP_SLOTS) {
@@ -32,6 +33,7 @@ export class InventoryWin extends Win {
       this.ui.drag.bind(sl, () => (s.equipment[k] ? { type: 'equip', slot: k } : null), {
         icon: () => s.equipment[k] && iconCanvas(g, 'item', s.equipment[k].id, 36),
         onClick: () => this.ui.unequip(k), onRight: () => this.ui.unequip(k),
+        onTap: (e) => equipSheet(this.ui, e, k), onLong: () => this.ui.unequip(k),
       });
       this.ui.tip.bind(sl, () => (s.equipment[k] ? itemTooltipHtml(g, s.equipment[k].id, { hint: '클릭: 장비 해제' }) : `<div class="tt-type">${SLOT_NAME[k]} — 비어 있음</div>`));
       eq.appendChild(sl);
@@ -49,6 +51,7 @@ export class InventoryWin extends Win {
       this.ui.drag.bind(sl, () => (s.inventory[i] ? { type: 'item', slot: i } : null), {
         icon: () => s.inventory[i] && iconCanvas(g, 'item', s.inventory[i].id, 36),
         onClick: () => this.ui.useItem(i), onRight: () => this.ui.useItem(i),
+        onTap: (e) => itemSheet(this.ui, e, i), onLong: () => this.ui.useItem(i),
       });
       this.ui.tip.bind(sl, () => {
         const cur = s.inventory[i];
@@ -75,7 +78,7 @@ export class SkillsWin extends Win {
       .sort(([, a], [, b]) => (a.level ?? 0) - (b.level ?? 0));
     for (const id of s.skills) if (!all.find(([k]) => k === id)) all.push([id, g.data.skills[id] ?? { name: id }]);
     const b = this.body;
-    b.innerHTML = '<div class="skill-list"></div><div class="note">배운 기술을 단축키 칸으로 끌어다 놓으세요 · 우클릭: 빈 칸에 자동 등록</div>';
+    b.innerHTML = `<div class="skill-list"></div><div class="note">${this.ui.mobile?.on ? '기술을 탭해 [단축키 1~6]으로 등록 · 길게 누르기: 빈 칸에 자동 등록' : '배운 기술을 단축키 칸으로 끌어다 놓으세요 · 우클릭: 빈 칸에 자동 등록'}</div>`;
     const list = b.querySelector('.skill-list');
     if (!all.length) list.innerHTML = '<div class="empty">아직 깨달은 기술이 없다.<br>신의 응답을 기다려라.</div>';
     for (const [id, d] of all) {
@@ -94,9 +97,11 @@ export class SkillsWin extends Win {
           icon: () => iconCanvas(g, 'skill', id, 36),
           onClick: () => g.systems.skills?.use?.(g.player, id, g.controller?.target ?? null),
           onRight: () => { this.ui.autoHotbarSkill(id, true); },
+          onTap: (e) => skillSheet(this.ui, e, id), onLong: () => this.ui.autoHotbarSkill(id, true),
         });
       }
       this.ui.tip.bind(sl, () => skillTooltipHtml(g, id));
+      row.addEventListener('click', (e) => { if (this.ui.mobile?.on && !e.target.closest('.slot')) skillSheet(this.ui, sl, id); });
       list.appendChild(row);
     }
   }

@@ -1,7 +1,21 @@
 // 시스템 메뉴(Esc): 계속, 저장, 불러오기, 음량, 조작법, 타이틀로. + 공용 모달/확인창.
 import { el, esc } from './dom.js';
 
-export function helpHtml() {
+export function helpHtml(touch = false) {
+  if (touch) {
+    const t = [
+      ['조이스틱 (왼쪽 아래)', '끌어당긴 방향으로 계속 이동 (8방향)'],
+      ['화면 탭', '땅: 이동 · 적: 추적 후 공격 · 인물: 대화 · 물건: 줍기. 누르고 있으면 그 방향으로 이동'],
+      ['공격 (오른쪽 아래)', '누르고 있으면 연타. 조이스틱을 잡은 채 다른 손가락으로 눌러도 된다'],
+      ['기술 1~6 · 물약', '누르면 사용 · 길게 누르면 설명/단축키 빼기'],
+      ['대화/줍기 (F)', '가까운 인물·물건이 있으면 빛난다'],
+      ['대상', '가까운 적을 차례로 지정'],
+      ['가방·기술 창의 칸', '탭: 설명과 [사용·장착·단축키·버리기] · 길게 누르기: 바로 사용·장착'],
+      ['대화 중', '창을 탭해 넘기기 · 선택지를 탭해 고르기'],
+      ['채팅', '하단 채팅 칸을 탭하면 펼침/접힘'],
+    ];
+    return `<table class="help-table">${t.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</table>`;
+  }
   const rows = [
     ['WASD / 방향키', '8방향 이동 (두 키 동시 = 대각선). 누르고 있으면 끊김 없이 계속 이동'],
     ['좌클릭', '땅: 이동 · 적: 추적 후 연속 공격 · 인물: 다가가서 대화 · 물건: 줍기'],
@@ -33,6 +47,7 @@ export class SystemMenu {
       <button class="btn" data-a="load">마지막 기록 불러오기</button>
       <div class="sec-title" style="color:var(--gold);border-color:#444">소리</div>
       ${[['master', '전체'], ['bgm', '음악'], ['sfx', '효과음']].map(([k, n]) => `<div class="vol"><span>${n}</span><input type="range" min="0" max="100" data-v="${k}" value="${Math.round((a?.settings?.[k] ?? 0.7) * 100)}"><span class="pv">${Math.round((a?.settings?.[k] ?? 0.7) * 100)}</span></div>`).join('')}
+      ${this.ui.mobile?.compact && this.ui.mobile.fsSupported() ? `<button class="btn" data-a="fs">전체화면: ${this.ui.mobile.isFs() ? '켬' : '끔'}</button>` : ''}
       <button class="btn" data-a="help">조작법</button>
       <button class="btn" data-a="title">타이틀로</button>
     </div>`;
@@ -53,7 +68,11 @@ export class SystemMenu {
         this.ui.closeAll();
         if (!g.continueGame()) this.ui.toast('불러올 기록이 없다.');
       });
-      if (act === 'help') this.ui.modal('조작법', helpHtml());
+      if (act === 'fs') {
+        const on = this.ui.mobile.toggleFs();
+        e.target.closest('button').textContent = `전체화면: ${on ? '켬' : '끔'}`;
+      }
+      if (act === 'help') this.ui.modal('조작법', helpHtml(this.ui.mobile?.on));
       if (act === 'title') this.ui.confirm('타이틀 화면으로 돌아갈까요? (현재 진행을 저장합니다)', () => {
         g.save();
         location.href = location.pathname;

@@ -93,6 +93,21 @@ function make(rows, hx, hy) {
   return `url(${c.toDataURL()}) ${hx * 2} ${hy * 2}, auto`;
 }
 
+// 같은 도트 그림을 버튼 아이콘으로 (터치 공격 버튼 등). scale 배 최근접 확대 캔버스.
+export function pixelArt(kind, scale = 2) {
+  const rows = ART[kind] ?? ART.normal;
+  const c = document.createElement('canvas');
+  c.width = c.height = 16 * scale;
+  c.className = 'icon';
+  const ctx = c.getContext('2d');
+  rows.forEach((row, y) => [...row].forEach((ch, x) => {
+    const col = PAL[ch];
+    if (!col) return;
+    ctx.fillStyle = col; ctx.fillRect(x * scale, y * scale, scale, scale);
+  }));
+  return c;
+}
+
 export function buildCursors() {
   try {
     const out = {};

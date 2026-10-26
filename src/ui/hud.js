@@ -2,6 +2,7 @@
 import { el, esc, iconCanvas, fmtNum, clamp, skillTooltipHtml, itemTooltipHtml } from './dom.js';
 import { MiniMap } from './minimap.js';
 import { pixelText } from './skin.js';
+import { TouchPad } from './touch.js';
 
 const KEY_LABEL = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
 const MENU_BTNS = [['inventory', '가방', 'I'], ['skills', '기술', 'K'], ['character', '능력', 'C'], ['quests', '일지', 'J'], ['map', '지도', 'M'], ['menu', '메뉴', 'Esc']];
@@ -89,11 +90,35 @@ export class Hud {
       else if (e.key === 'Escape') this.closeChat();
     });
     ci.addEventListener('blur', () => this.closeChat());
+    // 터치: 채팅은 최근 몇 줄만 보이고, 탭하면 펼침/접힘
+    q('#chat').addEventListener('click', () => {
+      if (!this.ui.mobile?.on || this.chatOpen) return;
+      const c = q('#chat'), log = this.$.chatLog;
+      c.classList.toggle('open');
+      log.scrollTop = log.scrollHeight;
+    });
     for (const l of this.chatLines) this.appendChatDom(l);
+    this.pad = new TouchPad(this);
+    this.pad.build(r);
+    this.ui.mobile?.syncBar();
     this.refreshAll();
   }
 
-  destroy() { this.root?.remove(); this.root = null; }
+  destroy() { this.pad?.destroy(); this.pad = null; this.root?.remove(); this.root = null; }
+
+  // 단축키 항목의 쿨다운 {pct, left} (하단 단축키 칸·터치 버튼 공용)
+  cdOf(h) {
+    const g = this.game, sk = g.systems.skills;
+    let total, left;
+    if (typeof h === 'string') {
+      total = sk?.cooldownTotal?.(h) ?? g.data.skills[h]?.cd ?? g.data.skills[h]?.cooldown ?? 0;
+      left = sk?.cooldownLeft?.(h) ?? 0;
+    } else {
+      const u = g.data.items[h.item]?.use;
+      total = this.potMax; left = u?.heal || u?.mana ? (this.potLeft ?? 0) : 0;
+    }
+    return { pct: total && left > 0 ? clamp(left / total, 0, 1) : 0, left };
+  }
 
   bind() {
     const b = this.game.bus;
@@ -151,21 +176,12 @@ export class Hud {
       $.expLbl.textContent = max ? '최고 레벨' : `경험치 ${fmtNum(exp)} / ${fmtNum(need)} (${(clamp(exp / need, 0, 1) * 100).toFixed(1)}%)`;
     }
     // 단축키 쿨다운/MP
-    const sk = g.systems.skills;
-    const potLeft = g.systems.inventory?.potionCooldownLeft?.() ?? 0;
+    const potLeft = this.potLeft = g.systems.inventory?.potionCooldownLeft?.() ?? 0;
     if (potLeft > (this.potMax ?? 0) || potLeft === 0) this.potMax = potLeft;
     s.hotbar.forEach((h, i) => {
       const slot = $.slots[i];
       if (!h || !slot._cd) return;
-      let total, left;
-      if (typeof h === 'string') {
-        total = sk?.cooldownTotal?.(h) ?? g.data.skills[h]?.cd ?? g.data.skills[h]?.cooldown ?? 0;
-        left = sk?.cooldownLeft?.(h) ?? 0;
-      } else {
-        const u = g.data.items[h.item]?.use;
-        total = this.potMax; left = u?.heal || u?.mana ? potLeft : 0;
-      }
-      const pct = total && left > 0 ? clamp(left / total, 0, 1) : 0;
+      const { pct, left } = this.cdOf(h);
       const key = left > 0 ? Math.ceil(left * 10) : 0;
       if (slot._cdk !== key) {
         slot._cdk = key;
@@ -186,6 +202,7 @@ export class Hud {
     if (this.noticeT > 0) { this.noticeT -= dt; if (this.noticeT <= 0) this.nextNotice(); }
     this.trackT -= dt;
     if (this.trackT <= 0) { this.trackT = 1; this.refreshTracker(); }
+    this.pad?.update(dt);
   }
 
   updateTarget() {
@@ -273,6 +290,7 @@ export class Hud {
         slot.append(slot._cd, slot._cdt, el('span', 'qty', String(n)));
       }
     });
+    this.pad?.refresh();
   }
   flashSlot(i) {
     const s = this.$.slots[i];

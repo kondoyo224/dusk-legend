@@ -87,6 +87,83 @@ const TESTS = {
     return { monster: id, hp0, hpNow: m.hp, killed: m.dead || !w.entities.includes(m), facing: p.dir, secs: +(game.time - t0).toFixed(2) };
   },
 
+  // 터치 오버레이(워커 C, src/ui/touch.js): 합성 PointerEvent 로 조이스틱 이동 · 멀티터치 공격 · 기술 버튼. &touch=1 로 오버레이 강제 표시.
+  async touch(game) {
+    const pad = document.getElementById('tpad');
+    if (!pad) return { error: '#tpad 없음' };
+    const zone = pad.querySelector('.joy-zone'), joy = pad.querySelector('.joy'), atk = pad.querySelector('.tb.atk');
+    const visible = getComputedStyle(pad).display !== 'none' && zone.getBoundingClientRect().width > 0;
+    if (!visible) return { visible, error: '오버레이가 숨겨져 있음 (&touch=1 필요)' };
+    const fire = (elm, type, pointerId, x, y) => elm.dispatchEvent(new PointerEvent(type, { pointerId, pointerType: 'touch', isPrimary: pointerId === 11, clientX: x, clientY: y, button: 0, buttons: type === 'pointerup' ? 0 : 1, bubbles: true, cancelable: true, composed: true }));
+    const jr = joy.getBoundingClientRect(), cx = jr.left + jr.width / 2, cy = jr.top + jr.height / 2, R = jr.width / 2;
+    const p = game.player, w = game.world, inp = game.input, out = { visible };
+    // 1) 조이스틱 화면 오른쪽(그리드 (1,-1)) 1.2초
+    const start = findOpenLine(game, { dx: 1, dy: -1 }, 8);
+    if (!start) return { ...out, skip: '열린 직선 없음' };
+    p.x = start.x; p.y = start.y; p.rx = p.x; p.ry = p.y; p.move = null;
+    await sleep(game, 0.1);
+    const x0 = p.x, y0 = p.y;
+    fire(zone, 'pointerdown', 11, cx + R * 0.9, cy);
+    const dirSet = inp.virtualDir ? { sx: +inp.virtualDir.sx.toFixed(2), sy: +inp.virtualDir.sy.toFixed(2) } : null;
+    await sleep(game, 1.2);
+    fire(window, 'pointerup', 11, cx + R * 0.9, cy);
+    const afterUp = inp.virtualDir;
+    await sleep(game, 0.4);
+    out.joystick = { dirSet, dx: p.x - x0, dy: p.y - y0, moved: p.x - x0 >= 3 && p.y - y0 <= -3, releasedNull: afterUp === null, stopped: !p.move };
+    // 2) 멀티터치: 조이스틱(가운데=데드존)을 잡은 채 공격 버튼 → 몬스터 처치, 그 사이 조이스틱 끌기도 인식
+    const spot = findOpenLine(game, { dx: 1, dy: 0 }, 2);
+    p.x = spot.x; p.y = spot.y; p.rx = p.x; p.ry = p.y; p.move = null;
+    const id = Object.keys(game.data.monsters)[0];
+    const m = game.systems.spawner.spawnNear(id, spot.x + 1, spot.y, {});
+    if (!m) return { ...out, skip: 'spawn 실패' };
+    m.ai = { ...(m.ai || {}), frozen: true };
+    fire(zone, 'pointerdown', 11, cx, cy);
+    const ar = atk.getBoundingClientRect();
+    fire(atk, 'pointerdown', 12, ar.left + ar.width / 2, ar.top + ar.height / 2);
+    const spaceDown = inp.down.has('Space');
+    const t0 = game.time;
+    while (game.time - t0 < 3 && !m.dead && w.entities.includes(m)) await sleep(game, 0.05);
+    const killed = m.dead || !w.entities.includes(m);
+    fire(window, 'pointermove', 11, cx, cy - R * 0.9); // 공격 중 다른 손가락의 조이스틱
+    const dirWhileAtk = inp.virtualDir ? { sx: +inp.virtualDir.sx.toFixed(2), sy: +inp.virtualDir.sy.toFixed(2) } : null;
+    fire(window, 'pointerup', 12, 0, 0);
+    const spaceReleased = !inp.down.has('Space');
+    fire(window, 'pointerup', 11, 0, 0);
+    out.attack = { monster: id, killed, secs: +(game.time - t0).toFixed(2), spaceDown, spaceReleased, multiTouchDir: dirWhileAtk, joyReleased: inp.virtualDir === null };
+    // 3) 기술 버튼 1 (등록돼 있으면): 누르면 Digit1 → useSlot(0)
+    const h = game.state.hotbar[0];
+    if (typeof h === 'string' && game.state.skills.includes(h)) {
+      const sb = pad.querySelector('.tb.sk[data-i="0"]'), r = sb.getBoundingClientRect();
+      p.mp = p.maxMp;
+      const mp0 = p.mp;
+      fire(sb, 'pointerdown', 13, r.left + 5, r.top + 5);
+      await sleep(game, 0.1);
+      fire(window, 'pointerup', 13, 0, 0);
+      await sleep(game, 0.1);
+      out.skill = { id: h, cdLeft: +(game.systems.skills.cooldownLeft?.(h) ?? 0).toFixed(2), mpUsed: mp0 - p.mp, digitReleased: !inp.down.has('Digit1') };
+    } else out.skill = { skip: '단축키 1 에 기술 없음' };
+    // 4) 가방 칸 탭 → 동작 상자, [단축키 7] 등록 → 물약 버튼 표시
+    const potId = Object.keys(game.data.items).find((k) => game.data.items[k].use?.heal);
+    if (potId) {
+      game.systems.inventory.add(potId, 3);
+      game.ui.windows.inventory.open();
+      await sleep(game, 0.1);
+      const idx = game.state.inventory.findIndex((it) => it?.id === potId);
+      const sl = document.querySelectorAll('.invwin .inv-grid .slot')[idx], r = sl.getBoundingClientRect();
+      fire(sl, 'pointerdown', 14, r.left + 5, r.top + 5);
+      fire(sl, 'pointerup', 14, r.left + 5, r.top + 5);
+      const sheet = document.querySelector('.tsheet');
+      const b7 = [...(sheet?.querySelectorAll('.ts-row .btn') ?? [])].find((b) => b.textContent === '7');
+      b7?.click();
+      await sleep(game, 0.4);
+      const potBtn = pad.querySelector('.tb.pot:not(.hidden)');
+      out.sheet = { item: potId, sheetOpened: !!sheet, hotbar7: game.state.hotbar[6]?.item ?? null, potButton: !!potBtn, sheetClosed: !document.querySelector('.tsheet') };
+      game.ui.windows.inventory.close();
+    }
+    out.ok = !!(out.joystick.moved && out.joystick.releasedNull && out.attack.killed && out.attack.multiTouchDir && out.attack.spaceReleased);
+    return out;
+  },
+
   async path(game) {
     const p = game.player, w = game.world;
     let goal = null;

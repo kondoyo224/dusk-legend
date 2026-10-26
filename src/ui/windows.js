@@ -49,9 +49,17 @@ export class Win {
   place() {
     const r = this.root, W = window.innerWidth, H = window.innerHeight;
     const w = r.offsetWidth, h = r.offsetHeight;
-    const saved = loadPos()[this.id];
-    let p = saved ?? this.opts.place?.(W, H, w, h) ?? { x: (W - w) / 2, y: (H - h) / 2 - 40 };
-    p = { x: Math.max(0, Math.min(W - w, p.x)), y: Math.max(0, Math.min(H - h - 10, p.y)) };
+    let p;
+    if (this.ui.mobile?.compact) {
+      // 작은 화면/터치: 저장 위치 무시, 하단 패널 위 영역의 가운데
+      const top = H - (this.ui.mobile.barH || 0);
+      p = { x: (W - w) / 2, y: Math.max(0, (top - h) / 2) };
+      p = { x: Math.max(0, Math.min(W - w, p.x)), y: Math.max(0, Math.min(top - h, p.y)) };
+    } else {
+      const saved = loadPos()[this.id];
+      p = saved ?? this.opts.place?.(W, H, w, h) ?? { x: (W - w) / 2, y: (H - h) / 2 - 40 };
+      p = { x: Math.max(0, Math.min(W - w, p.x)), y: Math.max(0, Math.min(H - h - 10, p.y)) };
+    }
     r.style.left = p.x + 'px'; r.style.top = p.y + 'px';
   }
   dragTitle(bar) {
@@ -64,6 +72,7 @@ export class Win {
       };
       const up = () => {
         window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up);
+        if (this.ui.mobile?.compact) return;
         loadPos()[this.id] = { x: r.offsetLeft, y: r.offsetTop }; savePos();
       };
       window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);

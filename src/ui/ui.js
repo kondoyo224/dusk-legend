@@ -10,6 +10,7 @@ import { SystemMenu, makeModal } from './menu.js';
 import { Ending } from './ending.js';
 import { CursorCtl } from './cursor.js';
 import { applySkin } from './skin.js';
+import { MobileCtl, ActionSheet } from './mobile.js';
 
 const WIN_KEYS = { KeyI: 'inventory', KeyK: 'skills', KeyC: 'character', KeyJ: 'quests', KeyM: 'map' };
 
@@ -24,6 +25,8 @@ export class UI {
     this.layer = el('div'); this.layer.id = 'win-layer';
     this.modals = [];
     this.tip = new Tooltip(root);
+    this.mobile = new MobileCtl(this); // 터치 모드·화면 크기 클래스·전체화면 (src/ui/mobile.js)
+    this.sheet = new ActionSheet(this);
     this.drag = new DragManager(this);
     this.title = new TitleScreen(this);
     this.hud = new Hud(this);
@@ -63,6 +66,7 @@ export class UI {
     const g = this.game;
     this.cursor.update(dt);
     if (g.scene !== 'play' || !g.state) return;
+    this.mobile.update(dt);
     this.dialogBox.update(dt);
     this.ending.update(dt);
     this.hud.update(dt);
@@ -80,6 +84,7 @@ export class UI {
   }
   escape() {
     if (this.drag.cancel()) return;
+    if (this.sheet.isOpen) { this.sheet.close(); return; }
     if (this.modals.length) { this.modals[this.modals.length - 1](); return; }
     if (this.menu.isOpen) { this.menu.close(); return; }
     if (this.game.dialog.isOpen) return;
@@ -104,6 +109,7 @@ export class UI {
     this.menu.close();
     while (this.modals.length) this.modals[this.modals.length - 1]();
     this.tip.hide();
+    this.sheet?.close();
   }
   modal(title, html) { return makeModal(this, title, html); }
   confirm(text, onYes) { return makeModal(this, '확인', `<p style="text-align:center;line-height:1.7">${text}</p>`, [['예', onYes], ['아니오', null]]); }
@@ -252,11 +258,29 @@ class Tooltip {
     this.box = el('div'); this.box.id = 'tooltip'; this.box.classList.add('hidden');
     root.appendChild(this.box);
     this.src = null; this.fn = null;
-    window.addEventListener('pointermove', (e) => this.move(e.clientX, e.clientY));
+    window.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') this.move(e.clientX, e.clientY); });
+    // 터치: 탭하면 보이고, 다른 곳을 누르거나 4초 뒤 사라진다
+    window.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse' && this.src && !this.src.contains(e.target)) this.hide(); }, true);
   }
   bind(elm, fn) {
-    elm.addEventListener('pointerenter', (e) => { this.src = elm; this.fn = fn; this.refresh(); this.move(e.clientX, e.clientY); });
-    elm.addEventListener('pointerleave', () => { if (this.src === elm) this.hide(); });
+    elm.addEventListener('pointerenter', (e) => { if (e.pointerType !== 'mouse') return; this.src = elm; this.fn = fn; this.refresh(); this.move(e.clientX, e.clientY); });
+    elm.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse' && this.src === elm) this.hide(); });
+    elm.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse') elm._tp = { x: e.clientX, y: e.clientY }; });
+    elm.addEventListener('pointerup', (e) => {
+      if (e.pointerType === 'mouse' || !elm._tp || Math.hypot(e.clientX - elm._tp.x, e.clientY - elm._tp.y) > 8) return;
+      this.src = elm; this.fn = fn; this.refresh();
+      this.anchorTo(elm);
+      clearTimeout(this.tt); this.tt = setTimeout(() => { if (this.src === elm) this.hide(); }, 4000);
+    });
+  }
+  // 터치용: 요소 위(공간이 없으면 아래)에 띄운다
+  anchorTo(elm) {
+    if (this.box.classList.contains('hidden')) return;
+    const r = elm.getBoundingClientRect(), w = this.box.offsetWidth, h = this.box.offsetHeight;
+    let x = (r.left + r.right) / 2 - w / 2, y = r.top - h - 8;
+    if (y < 4) y = r.bottom + 8;
+    this.box.style.left = Math.round(Math.max(4, Math.min(window.innerWidth - w - 4, x))) + 'px';
+    this.box.style.top = Math.round(Math.max(4, Math.min(window.innerHeight - h - 4, y))) + 'px';
   }
   refresh() {
     if (!this.fn || !this.src?.isConnected) return this.hide();
@@ -282,18 +306,24 @@ class Tooltip {
 // ── 드래그 앤 드롭 (포인터 이벤트 기반: 클릭과 드래그를 구분) ──
 class DragManager {
   constructor(ui) { this.ui = ui; this.cur = null; }
-  // opts: {icon()->canvas, onClick(), onRight()}
+  // opts: {icon()->canvas, onClick(), onRight(), onTap(elm) 터치 탭, onLong() 터치 길게 누르기}
   bind(elm, getPayload, opts = {}) {
-    elm.addEventListener('contextmenu', (e) => { e.preventDefault(); opts.onRight?.(); });
+    elm.addEventListener('contextmenu', (e) => { e.preventDefault(); if (performance.now() - (elm._touchT ?? -1e9) > 1500) opts.onRight?.(); });
     elm.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
       e.preventDefault();
+      const touch = e.pointerType !== 'mouse';
       const pl = getPayload();
       const start = { x: e.clientX, y: e.clientY };
-      let ghost = null;
+      let ghost = null, longDone = false, lt = 0;
+      if (touch) {
+        elm._touchT = performance.now();
+        if (opts.onLong && pl) lt = setTimeout(() => { longDone = true; this.ui.tip.hide(); opts.onLong(); }, 500);
+      }
       const mv = (ev) => {
-        if (!pl) return;
-        if (!ghost && Math.hypot(ev.clientX - start.x, ev.clientY - start.y) > 5) {
+        if (!pl || longDone || ev.pointerId !== e.pointerId) return;
+        if (!ghost && Math.hypot(ev.clientX - start.x, ev.clientY - start.y) > (touch ? 10 : 5)) {
+          clearTimeout(lt);
           ghost = el('div'); ghost.id = 'drag-ghost';
           const ic = opts.icon?.();
           if (ic) ghost.appendChild(ic);
@@ -304,19 +334,22 @@ class DragManager {
         if (ghost) { ghost.style.left = ev.clientX + 'px'; ghost.style.top = ev.clientY + 'px'; this.highlight(ev.clientX, ev.clientY); }
       };
       const cleanup = () => {
-        window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up);
+        clearTimeout(lt);
+        window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
         ghost?.remove(); ghost = null; this.cur = null; this.highlight(-1, -1);
       };
       const up = (ev) => {
+        if (ev.pointerId !== e.pointerId) return;
         const dragged = !!ghost;
         cleanup();
-        if (!dragged) { opts.onClick?.(); return; }
+        if (ev.type === 'pointercancel' || longDone) return;
+        if (!dragged) { if (touch && opts.onTap) opts.onTap(elm); else opts.onClick?.(); return; }
         const t = document.elementFromPoint(ev.clientX, ev.clientY);
         const drop = t?.closest?.('[data-drop]');
         this.ui.handleDrop(pl, drop?.dataset.drop ?? null, t === this.ui.game.canvas);
         this.ui.game.bus.emit('sound', { id: 'ui_click' });
       };
-      window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+      window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
     });
   }
   highlight(x, y) {

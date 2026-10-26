@@ -53,7 +53,7 @@ export class Ending {
     g.bus.emit('bgm', { id: 'ending' });
     const r = this.root = el('div');
     r.id = 'ending';
-    r.innerHTML = '<canvas class="bg"></canvas><div class="ep" style="opacity:0"></div><div class="skip">클릭 / Space: 넘기기</div>';
+    r.innerHTML = '<canvas class="bg"></canvas><div class="ep" style="opacity:0"></div><div class="skip">' + (this.ui.mobile?.on ? '탭: 넘기기' : '클릭 / Space: 넘기기') + '</div>';
     this.ui.root.appendChild(r);
     this.cv = r.querySelector('canvas'); this.ep = r.querySelector('.ep');
     this.t = 0; this.idx = -1; this.lineT = 0;

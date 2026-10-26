@@ -1,0 +1,198 @@
+/* 터치·모바일 (소유: 워커 C). style.css 가 @import 한다.
+   #ui-root 클래스(src/ui/mobile.js): .touch 터치 모드 · .small 작은 화면(폭<900 또는 높이<560) · .portrait 세로 · .short 높이<480
+   데스크톱(마우스, 1280×800)에는 아래 어떤 규칙도 적용되지 않는다(#tpad 는 숨김). */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+#ui-root { --bar-h: 106px; --vh: 100vh; --vvh: var(--vh); --vvt: 0px; --joy: 116px;
+  --sl: env(safe-area-inset-left, 0px); --sr: env(safe-area-inset-right, 0px); --st: env(safe-area-inset-top, 0px); --sb: env(safe-area-inset-bottom, 0px);
+  -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
+#ui-root .btn, #ui-root .slot, #ui-root .op, #ui-root .shop-row, #ui-root .qi { touch-action: manipulation; }
+
+/* ── 터치 조작 오버레이 ── */
+#tpad { display: none; }
+#ui-root.touch #tpad { display: block; position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+#ui-root.touch #tpad.off { display: none; }
+#tpad .joy-zone { position: absolute; left: calc(var(--sl) + 2px); bottom: calc(var(--bar-h) + 0px); width: calc(var(--joy) + 28px); height: calc(var(--joy) + 28px);
+  pointer-events: auto; touch-action: none; }
+#tpad .joy { position: absolute; left: 14px; top: 14px; width: var(--joy); height: var(--joy); box-sizing: border-box; pointer-events: none; }
+#tpad .joy .well { position: absolute; inset: 8px; background: #15110d var(--tx-dark); border: 2px solid; border-color: var(--sh2) var(--hi2) var(--hi2) var(--sh2); }
+#tpad .joy .well::before, #tpad .joy .well::after { content: ""; position: absolute; background: #2a2218; }
+#tpad .joy .well::before { left: 50%; top: 10px; bottom: 10px; width: 2px; margin-left: -1px; }
+#tpad .joy .well::after { top: 50%; left: 10px; right: 10px; height: 2px; margin-top: -1px; }
+#tpad .joy .ar { position: absolute; font-style: normal; font-size: 10px; line-height: 10px; color: #7a6a50; text-shadow: 1px 1px 0 #000; }
+#tpad .joy .ar.on { color: var(--yel); }
+#tpad .joy .ar.u { left: 50%; top: 11px; margin-left: -5px; } #tpad .joy .ar.d { left: 50%; bottom: 11px; margin-left: -5px; }
+#tpad .joy .ar.l { top: 50%; left: 12px; margin-top: -5px; } #tpad .joy .ar.r { top: 50%; right: 12px; margin-top: -5px; }
+#tpad .joy .knob { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; box-sizing: border-box;
+  background: #3a2818 var(--tx-wood); border: 2px solid; border-color: #c8b48c #1e140a #1e140a #c8b48c; box-shadow: 0 0 0 1px #000; }
+#tpad .joy .knob::after { content: ""; position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; margin: -4px 0 0 -4px; background: #d8c8a0; box-shadow: 1px 1px 0 #1a120a, -1px -1px 0 #6a5a40; }
+#tpad .joy.on .knob { border-color: #fff0a0 #6a4a10 #6a4a10 #fff0a0; }
+
+#tpad .tcl { position: absolute; right: calc(var(--sr) + 6px); bottom: calc(var(--bar-h) + 6px); }
+#tpad .tutil { position: absolute; left: calc(var(--sl) + var(--joy) + 34px); bottom: calc(var(--bar-h) + 10px); display: flex; gap: 6px; align-items: flex-end; }
+#ui-root.portrait #tpad .tutil { left: calc(var(--sl) + 14px); bottom: calc(var(--bar-h) + var(--joy) + 36px); }
+#tpad .tb { position: absolute; box-sizing: border-box; pointer-events: auto; touch-action: none; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: #3a2818 var(--tx-wood); border: 2px solid; border-color: #c8b48c #1e140a #1e140a #c8b48c; box-shadow: 0 0 0 1px #000;
+  color: #f0e0b8; font-weight: bold; text-shadow: 1px 1px 0 #000; }
+#tpad .tutil .tb { position: relative; width: 48px; height: 48px; }
+#tpad .tb.on { border-color: #1e140a #c8b48c #c8b48c #1e140a; background-color: #22180e; }
+#tpad .tb.on canvas.icon { transform: translate(1px, 1px); }
+#tpad .tb canvas.icon { flex: none; }
+#tpad .tb .lbl { font-size: 12px; line-height: 13px; }
+#tpad .tb .k2 { font-size: 9px; line-height: 10px; color: #a8987a; font-weight: normal; }
+#tpad .tb .k { position: absolute; left: 2px; top: 0; z-index: 4; font-size: 10px; color: #fff0b0; text-shadow: var(--out1); }
+#tpad .tb .qty { position: absolute; right: 2px; bottom: 0; z-index: 4; font-size: 10px; color: #fff; text-shadow: var(--out1); }
+#tpad .tb .cd { position: absolute; left: 0; right: 0; bottom: 0; height: 0; z-index: 2; background: rgba(0,0,0,.68); border-top: 1px solid #000; pointer-events: none; }
+#tpad .tb .cdt { position: absolute; inset: 0; z-index: 3; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #fff; text-shadow: var(--out1); pointer-events: none; }
+#tpad .tb.empty { background: #0c0a07; border-color: #0a0705 #9a8a68 #9a8a68 #0a0705; box-shadow: 0 0 0 1px #000, inset 1px 1px 0 #2e261c; opacity: .3; } /* 빈 칸은 흐리게 — 맵을 덜 가리도록 */
+#tpad .tb.dim canvas.icon { opacity: .4; filter: grayscale(1); }
+#tpad .tb.nomp canvas.icon { filter: saturate(.3) brightness(.6); }
+#tpad .tb.atk { background: #5a1a10 var(--tx-wood); border-color: #f0a888 #2a0604 #2a0604 #f0a888; }
+#tpad .tb.atk.on { border-color: #2a0604 #f0a888 #f0a888 #2a0604; background-color: #3a0e08; }
+#tpad .tb.tgt { background: #222c4a var(--tx-navy); border-color: #5a6a98 #0c1020 #0c1020 #5a6a98; }
+#tpad .tb.act.dim { color: #8a7a5c; }
+#tpad .tb.act.hl { color: var(--yel); background: #6a4a16; border-color: #f0d890 #2a1a04 #2a1a04 #f0d890; animation: actBlink 1s steps(2) infinite; }
+#tpad .tb.act.hl.on { border-color: #2a1a04 #f0d890 #f0d890 #2a1a04; }
+@keyframes actBlink { 50% { color: #fff; } }
+
+/* ── 하단 패널 압축 (터치) ── */
+#ui-root.touch #bar { height: auto; padding: 2px calc(4px + var(--sr)) calc(3px + var(--sb)) calc(4px + var(--sl)); }
+#ui-root.touch #bar .expbar { height: 5px; margin: 0 0 2px; }
+#ui-root.touch #bar .row { height: 42px; gap: 4px; }
+#ui-root.touch #bar .stat { width: 190px; padding: 1px 4px; }
+#ui-root.touch #bar .who { height: 12px; }
+#ui-root.touch .gauge { height: 12px; }
+#ui-root.touch .gauge .gb { height: 12px; }
+#ui-root.touch #bar .explbl { display: none; }
+#ui-root.touch #bar .hotbar { display: none; }
+#ui-root.touch #bar .act { padding: 0; justify-content: flex-start; }
+#ui-root.touch #bar .menus { gap: 2px; }
+#ui-root.touch #bar .menus .btn { flex: none; width: 42px; height: 42px; padding: 0; font-size: 12px; }
+#ui-root.touch #bar .menus .btn:active { padding: 1px 0 0 1px; }
+#ui-root.touch #bar .menus .btn b { display: none; }
+#ui-root.touch #chat { position: relative; min-width: 0; cursor: pointer; }
+#ui-root.touch #chat .log { overflow: hidden; font-size: 11px; line-height: 13px; }
+#ui-root.touch #chat.open .log { position: absolute; left: -2px; bottom: calc(100% + 4px); width: min(560px, calc(100vw - 16px)); height: min(240px, calc(var(--vh) * .5));
+  overflow-y: auto; touch-action: pan-y; padding: 2px 4px; box-sizing: border-box; z-index: 8;
+  background: #15110d var(--tx-dark); border: 2px solid; border-color: var(--hi) var(--sh) var(--sh) var(--hi); box-shadow: 0 0 0 1px #000; }
+#ui-root.touch #chat.open .tip { display: block; color: var(--txt-dim); font-size: 11px; }
+#ui-root.touch #chat.open .tip::before { content: "▲ 펼침 — 탭하면 접힘"; }
+#ui-root.touch #chat .tip { font-size: 0; }
+#ui-root.touch.portrait #bar .row { flex-wrap: wrap; height: auto; row-gap: 3px; }
+#ui-root.touch.portrait #chat { order: -1; flex: 1 1 100%; height: 32px; }
+#ui-root.touch.portrait #bar .stat { flex: 1 1 0; width: auto; min-width: 0; height: 42px; }
+#ui-root.touch.portrait #bar .menus .btn { width: 40px; }
+
+/* ── HUD 배치 (터치) ── */
+#ui-root.touch #minimap { right: calc(4px + var(--sr)); top: calc(4px + var(--st)); width: auto; }
+#ui-root.touch #minimap canvas { width: 120px; height: 91px; }
+#ui-root.touch #minimap .name { font-size: 11px; width: 124px; overflow: hidden; white-space: nowrap; }
+#ui-root.touch.short #minimap canvas { width: 104px; height: 79px; }
+#ui-root.touch.short #minimap .name { width: 108px; }
+#ui-root.touch.short #minimap .sub { display: none; }
+#ui-root.touch #buffs { left: calc(6px + var(--sl)); top: calc(6px + var(--st)); }
+#ui-root.touch #tracker { left: calc(6px + var(--sl)); right: auto; top: calc(44px + var(--st)); width: 200px; max-height: calc(var(--vh) - var(--bar-h) - var(--joy) - 90px); overflow: hidden; }
+#ui-root.touch #tracker .qn, #ui-root.touch #tracker .qp { font-size: 11px; }
+#ui-root.touch #toasts { right: calc(146px + var(--sr)); top: calc(6px + var(--st)); max-width: 44vw; }
+#ui-root.touch #status { top: calc(46px + var(--st)); bottom: auto; }
+#ui-root.touch #boss { width: min(480px, calc(100% - 300px)); box-sizing: border-box; }
+#ui-root.touch.portrait #target, #ui-root.touch.portrait #boss { left: calc(6px + var(--sl)); transform: none; width: calc(100% - 150px); box-sizing: border-box; }
+#ui-root.touch.portrait #buffs { top: calc(48px + var(--st)); }
+#ui-root.touch.portrait #tracker { top: calc(88px + var(--st)); }
+#ui-root.touch.portrait #toasts { right: calc(6px + var(--sr)); top: calc(150px + var(--st)); }
+#ui-root.touch.portrait #status { top: calc(88px + var(--st)); }
+#ui-root.small #notice .n { max-width: 86vw; box-sizing: border-box; }
+#rotate-hint { position: absolute; z-index: 12; left: 50%; top: calc(var(--st) + 156px); transform: translateX(-50%); display: flex; align-items: center; gap: 8px;
+  padding: 4px 4px 4px 10px; white-space: nowrap; font-weight: bold; color: var(--yel); text-shadow: 1px 1px 0 #000; }
+#rotate-hint .btn { width: 30px; height: 26px; padding: 0; }
+
+/* ── 대화창 ── */
+#ui-root.touch #dialog { bottom: calc(var(--bar-h) + 4px); max-width: calc(100% - 12px - var(--sl) - var(--sr)); max-height: calc(var(--vh) - var(--bar-h) - 8px); overflow-y: auto; }
+#ui-root.touch #dialog .ops { gap: 4px; }
+#ui-root.touch #dialog .op { padding: 0 10px; min-height: 38px; display: flex; align-items: center; font-size: 13px;
+  background: #3a2818 var(--tx-wood); border: 2px solid; border-color: #c8b48c #1e140a #1e140a #c8b48c; box-shadow: 0 0 0 1px #000; }
+#ui-root.touch #dialog .op.hl, #ui-root.touch #dialog .op:active { background: var(--sel); border-color: var(--sel-hi) #10182e #10182e var(--sel-hi); }
+#ui-root.touch #dialog .nx::after { content: " 탭"; }
+#ui-root.small #dialog .in { min-height: 0; }
+#ui-root.small #dialog .pf canvas { width: 64px !important; height: 64px !important; }
+#ui-root.short #dialog .tx { font-size: 12px; line-height: 17px; min-height: 0; }
+
+/* ── 창 (작은 화면: 화면 안으로, 본문 스크롤) ── */
+#ui-root.small .win { max-width: calc(100vw - 4px - var(--sl) - var(--sr)); max-height: calc(var(--vh) - var(--bar-h) - 4px); box-sizing: border-box; }
+#ui-root.small .win .wb { overflow: auto; min-height: 0; flex: 1 1 auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #6a5a40 #1a1410; }
+#ui-root.touch .win .wt { height: 28px; flex: none; touch-action: none; }
+#ui-root.touch .win .wt .x { width: 36px; height: 24px; line-height: 21px; font-size: 12px; }
+#ui-root.touch .slot { touch-action: none; }
+#ui-root.short .invwin .wb { display: grid; grid-template-columns: auto auto; column-gap: 10px; align-items: start; }
+#ui-root.short .invwin .wb > :nth-child(1) { grid-column: 1; grid-row: 1; }
+#ui-root.short .invwin .wb > :nth-child(2) { grid-column: 1; grid-row: 2; margin-bottom: 0; }
+#ui-root.short .invwin .wb > :nth-child(3) { grid-column: 2; grid-row: 1; }
+#ui-root.short .invwin .wb > :nth-child(4) { grid-column: 2; grid-row: 2; }
+#ui-root.short .invwin .wb > :nth-child(5) { grid-column: 1 / span 2; grid-row: 3; }
+#ui-root.small .skill-list { width: min(320px, calc(100vw - 30px)); max-height: none; }
+#ui-root.touch .skill-row { padding: 4px; }
+#ui-root.small .questwin { width: min(540px, calc(100vw - 30px)); height: min(340px, calc(var(--vh) - var(--bar-h) - 60px)); }
+#ui-root.small.portrait .questwin { flex-direction: column; height: min(460px, calc(var(--vh) - var(--bar-h) - 60px)); }
+#ui-root.small.portrait .questwin .ql { width: auto; height: 110px; flex: none; }
+#ui-root.touch .questwin .qi { padding: 6px 4px; }
+#ui-root.small .mapwin canvas { width: auto; height: auto; max-width: calc(100vw - 30px); max-height: calc(var(--vh) - var(--bar-h) - 100px); }
+#ui-root.small .shopwin { width: min(480px, calc(100vw - 8px)); }
+#ui-root.small .shop-list { height: auto; max-height: calc(var(--vh) - var(--bar-h) - 130px); min-height: 110px; }
+#ui-root.touch .shop-row { padding: 3px 4px; }
+#ui-root.touch .shopfoot { flex-wrap: wrap; }
+#ui-root.touch .shopfoot .btn.sm { width: 30px; height: 26px; padding: 0; }
+#ui-root.touch .shopfoot input { height: 26px; }
+#ui-root.touch .shopfoot .act { padding: 6px 14px; }
+#ui-root.touch .shopwin .tabs .btn.sm { padding: 6px 14px; }
+#ui-root.touch .charwin .plus { width: 34px; height: 28px; }
+
+/* 모달·시스템 메뉴 */
+#ui-root.small .modal { min-width: 0; width: min(600px, calc(100vw - 16px)); max-height: calc(var(--vh) - 16px); overflow-y: auto; box-sizing: border-box; }
+#ui-root.small .sysmenu { width: min(280px, calc(100vw - 16px)); }
+#ui-root.touch .modal .btn, #ui-root.touch .sysmenu .btn { padding-top: 9px; padding-bottom: 9px; }
+#ui-root.touch.short .sysmenu .btn { padding-top: 6px; padding-bottom: 6px; }
+#ui-root.touch .vol input[type=range] { height: 14px; }
+#ui-root.touch .vol input[type=range]::-webkit-slider-thumb { width: 18px; height: 26px; }
+#ui-root.small .help-table td:first-child { white-space: normal; width: 96px; }
+
+/* 탭 동작 상자 */
+.tsheet { position: absolute; z-index: 55; max-width: min(260px, calc(100vw - 8px)); padding: 6px; box-sizing: border-box; pointer-events: auto; }
+.tsheet .ts-info { padding: 4px 6px; margin-bottom: 6px; font-size: 12px; line-height: 1.45; background: #16120e var(--tx-dark);
+  border: 2px solid; border-color: var(--sh2) var(--hi2) var(--hi2) var(--sh2); text-shadow: 1px 1px 0 #000; }
+.tsheet .ts-info .tt-name { font-weight: bold; }
+.tsheet .ts-info .tt-type { color: var(--txt-dim); font-size: 11px; margin-bottom: 3px; padding-bottom: 2px; border-bottom: 1px solid #3a3024; }
+.tsheet .ts-info .tt-req.bad { color: #ff5a5a; } .tsheet .ts-info .tt-stats { color: #9fd0ff; } .tsheet .ts-info .tt-use { color: #9fff9f; }
+.tsheet .ts-info .tt-desc { color: #d8c8a0; margin-top: 3px; } .tsheet .ts-info .tt-price { color: #ffd65a; } .tsheet .ts-info .tt-hint { color: #8a8070; font-size: 11px; }
+.tsheet .ts-acts { display: flex; flex-wrap: wrap; gap: 5px; }
+.tsheet .ts-acts > .btn { flex: 1 1 auto; min-height: 36px; }
+.tsheet .ts-row { flex: 1 1 100%; display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: bold; color: var(--gold); text-shadow: 1px 1px 0 #000; }
+.tsheet .ts-row span { margin-right: 2px; }
+.tsheet .ts-row .btn { width: 34px; height: 34px; padding: 0; }
+.tsheet .ts-row .btn:active { padding: 1px 0 0 1px; }
+
+/* 툴팁 (작은 화면) */
+#ui-root.small #tooltip { max-width: min(250px, calc(100vw - 12px)); }
+
+/* ── 타이틀 / 캐릭터 생성 ── */
+#ui-root.small #title .logo canvas.ptext { width: auto !important; height: auto !important; max-width: 92vw; max-height: 20vh; }
+#ui-root.small #title .menu { top: 52%; }
+#ui-root.touch #title .menu { width: 240px; }
+#ui-root.touch #title .menu .btn { padding: 10px 0; }
+#ui-root.touch #title .menu .btn:active { padding: 11px 0 9px; }
+#ui-root.small #title.creating .logo { display: none; }
+#ui-root.small #title .foot { bottom: calc(6px + var(--sb)); }
+#ui-root.small .cc { top: 50% !important; width: min(600px, calc(100vw - 12px)); max-height: calc(var(--vvh) - 12px); overflow-y: auto; box-sizing: border-box; overscroll-behavior: contain; }
+#ui-root.small.portrait .cc .row { flex-direction: column; }
+#ui-root.small.portrait .cc .pv { width: auto; flex-direction: row; justify-content: center; }
+#ui-root.small.portrait .cc .pv canvas, #ui-root.short .cc .pv canvas { width: 112px !important; height: 112px !important; }
+#ui-root.short .cc .pv { width: 136px; }
+#ui-root.short .cc h2 { margin-bottom: 6px; }
+#ui-root.short .cc .opts { gap: 4px; }
+#ui-root.touch .cc .btn.sm { padding: 6px 9px; }
+#ui-root.touch .cc .btn.sm:active, #ui-root.touch .cc .btn.sm.sel { padding: 7px 8px 5px 10px; }
+#ui-root.touch .cc .acts .btn { padding: 9px 12px; }
+#ui-root.touch .sw { width: 30px; height: 30px; }
+#ui-root.touch .cc input.name { padding: 7px 6px; font-size: 16px; } /* iOS: 16px 미만이면 입력 시 화면 확대 */
+#ui-root.touch .cc.kb { top: calc(var(--vvt) + 6px) !important; transform: translateX(-50%) !important; max-height: calc(var(--vvh) - 12px); }
+#ui-root.touch .cc.kb .acts { position: sticky; bottom: -10px; padding: 6px 0; background: #4c463c var(--tx-stone); }
+#ui-root.touch #ending .skip { bottom: calc(8px + var(--sb)); right: calc(10px + var(--sr)); font-size: 12px; }

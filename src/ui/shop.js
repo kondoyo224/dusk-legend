@@ -18,7 +18,8 @@ export class ShopWin extends Win {
     setTimeout(() => {
       if (this.isOpen) { this.root.querySelector('.wt span').textContent = this.opts.title; this.render(); }
       else this.open();
-      this.ui.windows.inventory.open();
+      // 좁은 화면에선 가방을 같이 열면 겹친다 → 판매 탭으로 충분
+      if (!(this.ui.mobile?.compact && window.innerWidth < 980)) this.ui.windows.inventory.open();
     }, 0);
   }
   onClose() { this.shopId = null; }
@@ -33,7 +34,7 @@ export class ShopWin extends Win {
     b.innerHTML = `<div class="tabs"><button class="btn sm${this.tab === 'buy' ? ' sel' : ''}" data-t="buy">구매</button><button class="btn sm${this.tab === 'sell' ? ' sel' : ''}" data-t="sell">판매</button>
       <span class="who">${this.npc ? esc(this.npc.name) : ''}</span></div>
       <div class="shop-list"></div>
-      <div class="shopfoot"><span class="g">보유 ${fmtNum(s.gold)} 골드</span><span>수량</span><input type="number" min="1" max="99" value="${this.qty}"><span class="sum"></span><button class="btn gold act">${this.tab === 'buy' ? '구매' : '판매'}</button></div>`;
+      <div class="shopfoot"><span class="g">보유 ${fmtNum(s.gold)} 골드</span><span>수량</span>${this.ui.mobile?.on ? '<button class="btn sm qd" data-d="-1">-</button>' : ''}<input type="number" min="1" max="99" value="${this.qty}">${this.ui.mobile?.on ? '<button class="btn sm qd" data-d="1">+</button>' : ''}<span class="sum"></span><button class="btn gold act">${this.tab === 'buy' ? '구매' : '판매'}</button></div>`;
     b.querySelectorAll('.tabs [data-t]').forEach((bt) => bt.addEventListener('click', () => { this.tab = bt.dataset.t; this.sel = null; this.qty = 1; g.bus.emit('sound', { id: 'ui_click' }); this.render(); }));
     const list = b.querySelector('.shop-list');
     const qIn = b.querySelector('input'), sum = b.querySelector('.sum'), act = b.querySelector('.act');
@@ -68,6 +69,11 @@ export class ShopWin extends Win {
       act.disabled = !cur || (this.tab === 'buy' && cur.price * q > s.gold);
     };
     qIn.addEventListener('input', upd);
+    b.querySelectorAll('.qd').forEach((bt) => bt.addEventListener('click', () => {
+      if (qIn.disabled) return;
+      qIn.value = Math.max(1, Math.min(99, (Math.floor(+qIn.value) || 1) + +bt.dataset.d));
+      upd();
+    }));
     qIn.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') this.doAction(); });
     act.addEventListener('click', () => this.doAction());
     upd();

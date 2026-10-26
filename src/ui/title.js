@@ -27,14 +27,14 @@ export class TitleScreen {
         <button class="btn" data-a="cont" ${canContinue ? '' : 'disabled'}>이어하기</button>
         <button class="btn" data-a="help">조작법</button>
       </div>
-      <div class="foot npe">모든 그림과 소리는 코드로 빚어졌습니다 · 마우스 또는 키보드로 플레이</div>`);
+      <div class="foot npe">모든 그림과 소리는 코드로 빚어졌습니다 · ${this.ui.mobile?.on ? '터치로 플레이 (가로 화면 권장)' : '마우스 또는 키보드로 플레이'}</div>`);
     r.querySelector('.menu').addEventListener('click', (e) => {
       const a = e.target.closest('button')?.dataset.a;
       if (!a) return;
       g.bus.emit('sound', { id: 'ui_click' });
       if (a === 'new') this.showCreate();
       if (a === 'cont') { if (g.continueGame()) this.hide(); else this.ui.toast('저장 데이터를 불러오지 못했습니다.'); }
-      if (a === 'help') this.ui.modal('조작법', helpHtml());
+      if (a === 'help') this.ui.modal('조작법', helpHtml(this.ui.mobile?.on));
     });
     // 도트 로고: 굵은 픽셀 글자 + 단색 외곽 + 3단 명암
     r.querySelector('.t1').appendChild(pixelText('황혼의 전설', { px: 22, scale: 3, hi: '#fff4c0', mid: '#f0b848', lo: '#b0561a', edge: '#200a02' }));
@@ -131,6 +131,7 @@ export class TitleScreen {
   showCreate() {
     const g = this.game;
     this.root.querySelector('.menu').classList.add('hidden');
+    this.root.classList.add('creating');
     this.root.querySelector('.logo').style.top = '5%';
     const look = { body: 'human', gender: 'm', hair: 0, hairColor: HAIR_COLORS[1], skin: SKINS[1], armor: 'tunic' };
     const box = el('div', 'iron rivets panel-center cc');
@@ -140,7 +141,7 @@ export class TitleScreen {
       <div class="row">
         <div class="pv"><div class="frame"></div><div class="hint" style="text-align:center">기억은 희미하지만<br>모습은 남아 있다.</div></div>
         <div class="opts">
-          <div><label class="k">이름</label><input class="name" maxlength="8" placeholder="이름을 새기시오 (2~8자)" spellcheck="false"></div>
+          <div><label class="k">이름</label><input class="name" maxlength="8" placeholder="이름을 새기시오 (2~8자)" spellcheck="false" autocomplete="off" enterkeyhint="go"></div>
           <div><label class="k">성별</label><div class="chips" data-k="gender"><button class="btn sm sel" data-v="m">남성</button><button class="btn sm" data-v="f">여성</button></div></div>
           <div><label class="k">머리 모양</label><div class="chips" data-k="hair">${HAIR_NAMES.map((n, i) => `<button class="btn sm${i === 0 ? ' sel' : ''}" data-v="${i}">${n}</button>`).join('')}</div></div>
           <div><label class="k">머리 색</label><div class="chips" data-k="hairColor">${HAIR_COLORS.map((c, i) => `<div class="sw${i === 1 ? ' sel' : ''}" data-v="${c}" style="background:${c}"></div>`).join('')}</div></div>
@@ -182,7 +183,7 @@ export class TitleScreen {
       const a = e.target.closest('button')?.dataset.a;
       if (!a) return;
       g.bus.emit('sound', { id: 'ui_click' });
-      if (a === 'back') { box.remove(); this.root.querySelector('.menu').classList.remove('hidden'); this.root.querySelector('.logo').style.top = ''; }
+      if (a === 'back') { box.remove(); this.root.classList.remove('creating'); this.root.querySelector('.menu').classList.remove('hidden'); this.root.querySelector('.logo').style.top = ''; }
       if (a === 'go') go();
       if (a === 'rand') {
         look.gender = Math.random() < 0.5 ? 'm' : 'f';
@@ -194,8 +195,12 @@ export class TitleScreen {
       }
     });
     nameIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); e.stopPropagation(); });
+    // 터치: 화상 키보드가 가려도 진행 버튼이 보이도록 상자를 위로 올리고(.kb) 보이는 높이(--vvh)에 맞춘다
+    nameIn.addEventListener('focus', () => { if (this.ui.mobile?.on) box.classList.add('kb'); });
+    // (blur 직후 바로 옮기면 누르던 버튼이 손가락 밑에서 사라진다 → 잠시 뒤에)
+    nameIn.addEventListener('blur', () => setTimeout(() => { if (document.activeElement === nameIn) return; box.classList.remove('kb'); try { window.scrollTo(0, 0); } catch { /* 무시 */ } }, 400));
     this.root.appendChild(box);
-    setTimeout(() => nameIn.focus(), 30);
+    if (!this.ui.mobile?.on) setTimeout(() => nameIn.focus(), 30); // 터치에선 자동으로 키보드를 띄우지 않음
   }
 }
 
