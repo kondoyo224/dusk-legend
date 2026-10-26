@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#120e1a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="황혼의 전설">
+<meta name="description" content="어둠의 전설·가디우스 풍 고전 도트 쿼터뷰 RPG — 귀혼의 서">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>황혼의 전설 — 귀혼의 서</title>
+<link rel="stylesheet" href="src/ui/style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ui-root"></div>
+<script>
+// 오류 수집 (tools/check.ps1 이 --dump-dom 으로 읽는다). 모듈 로드 실패도 잡기 위해 일반 스크립트로 먼저 등록.
+(function () {
+  var errs = [];
+  function rep(m) { errs.push(String(m)); var el = document.getElementById('__errors'); if (!el) { el = document.createElement('pre'); el.id = '__errors'; el.style.display = 'none'; document.body.appendChild(el); } el.textContent = errs.join(' | '); }
+  window.__reportError = rep;
+  window.addEventListener('error', function (e) { rep((e.message || 'resource error') + ' @ ' + (e.filename || (e.target && (e.target.src || e.target.href)) || '') + ':' + (e.lineno || '')); }, true);
+  window.addEventListener('unhandledrejection', function (e) { rep('unhandled: ' + ((e.reason && e.reason.stack) || e.reason)); });
+  var ce = console.error.bind(console);
+  console.error = function () { rep([].map.call(arguments, function (x) { return (x && x.stack) || x; }).join(' ')); ce.apply(null, arguments); };
+})();
+</script>
+<script type="module" src="src/main.js"></script>
+<script>setTimeout(function(){ if(!window.game && window.__reportError) window.__reportError("main.js 미실행 (모듈 로드 실패)"); }, 1500);</script>
+</body>
+</html>

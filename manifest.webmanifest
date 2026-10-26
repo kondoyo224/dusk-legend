@@ -1,0 +1,14 @@
+{
+  "name": "황혼의 전설 — 귀혼의 서",
+  "short_name": "황혼의 전설",
+  "description": "어둠의 전설·가디우스 풍 고전 도트 쿼터뷰 RPG",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#120e1a",
+  "theme_color": "#120e1a",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
