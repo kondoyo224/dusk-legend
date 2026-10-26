@@ -1,7 +1,8 @@
 // 비인간형 몬스터: 네발짐승(쥐/늑대/멧돼지), 거미, 박쥐, 슬라임, 그림자/망령. 소유: 워커 A.
 import { shade, rgba, ellipse } from './util.js';
 
-const OUT = 'rgba(10,8,12,0.6)';
+// 반투명 내부선 (실루엣 밖은 알파 컷 → 선택적 컬러 외곽선으로 대체)
+const OUT = 'rgba(36,12,48,0.5)';
 
 function frame(dir, pose) {
   const a = dir * Math.PI / 4;

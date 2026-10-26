@@ -1,7 +1,6 @@
-// 조명/대기 (도트풍): 어둠 오버레이 + 계단식(4단) 광원 구멍, 경계는 4×4 베이어 디더.
-// 모든 좌표는 저해상도 월드 버퍼(1 월드px = 1 버퍼px) 기준. 넓은 가산 발광은 쓰지 않는다. 소유: 워커 A.
+// 조명/대기 (★v2): 색 있는 어둠(남보라) 오버레이 + 계단식(6단) 부드러운 광원 구멍(디더 없음),
+// 횃불 등은 따뜻한 반투명 원 5단. 모든 좌표는 월드 버퍼(1 월드px = 1 버퍼px) 기준. 소유: 워커 A.
 import { makeCanvas, rgba, mix, hash2, hexToRgb } from './util.js';
-import { bayer } from './pixel.js';
 import { tileToWorld } from '../core/iso.js';
 
 const LIGHT_PX = 36;            // 광원 반경 1타일당 버퍼 px
@@ -10,11 +9,11 @@ const ISO = 0.62;               // 광원 타원 세로 비율
 
 // 맵 darkness → 실제 어둠. 낮 맵(≤0.3)은 거의 밝게, 던전도 완전 암흑은 피한다 (ART_STYLE §3)
 export function effectiveDarkness(d) {
-  if (d <= 0.3) return d * 0.3;
-  return Math.min(0.74, 0.09 + (d - 0.3) * 1.25);
+  if (d <= 0.3) return d * 0.25;
+  return Math.min(0.62, 0.08 + (d - 0.3) * 1.05); // 어두운 맵도 색감 유지 (검게 뭉개지지 않게)
 }
 
-// 계단식 광원 스탬프: 중심 1, 0.66, 0.33, 0 의 4단 + 단 경계 베이어 디더. (destination-out 으로 사용)
+// 계단식 광원 스탬프: 6단 동심 타원(디더 없음). (destination-out / 색광 lighter 로 사용)
 const stampCache = new Map();
 function lightStamp(r, color = '#000000') {
   r = Math.max(6, Math.round(r / 3) * 3);
@@ -30,8 +29,8 @@ function lightStamp(r, color = '#000000') {
     const dx = (x - r) / r, dy = (y - ry) / ry;
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist >= 1) continue;
-    const f = Math.min(1, (1 - dist) / 0.55);          // 반경 45% 안쪽은 완전 밝음
-    const q = Math.min(3, Math.floor(f * 3 + bayer(x, y))) / 3;
+    const f = Math.min(1, (1 - dist) / 0.6);           // 반경 40% 안쪽은 완전 밝음
+    const q = Math.ceil(f * f * 6 - 0.001) / 6;
     if (q <= 0) continue;
     const i = (y * c.width + x) * 4;
     d[i] = cr; d[i + 1] = cg; d[i + 2] = cb; d[i + 3] = Math.round(q * 255);
@@ -57,7 +56,7 @@ export class Lighting {
     this.ambient = { darkness: a.darkness ?? 0.2, tint: a.tint || null, particles: a.particles || null, fog: !!a.fog };
     this.dark = effectiveDarkness(this.ambient.darkness);
     this.particles = []; this.pType = this.ambient.particles;
-    this.darkColor = mix('#0a0812', this.ambient.tint || '#0a0812', 0.3);
+    this.darkColor = mix('#16123a', this.ambient.tint || '#16123a', 0.35); // 남보라 어둠 (순수 검정 금지)
   }
 
   // 버퍼 크기
@@ -130,18 +129,18 @@ export class Lighting {
     }
     c.globalAlpha = 1;
     ctx.drawImage(this.lc, 0, 0);
-    // 색광: 광원 안쪽 절반만, 아주 옅은 계단식 색 (넓은 가산 발광 금지)
+    // 색광: 따뜻한(또는 광원색) 반투명 원 — 계단 6단, 은은하게
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
     for (const L of lights) {
       if (L.self) continue;
-      const s = lightStamp(L.r * 0.55, L.color);
-      ctx.globalAlpha = 0.09 * L.a * (0.5 + this.dark);
+      const s = lightStamp(L.r * 0.62, L.color);
+      ctx.globalAlpha = (L.fire ? 0.16 : 0.12) * L.a * (0.45 + this.dark);
       ctx.drawImage(s, Math.round(L.x - (s.width >> 1)), Math.round(L.y - (s.height >> 1)));
     }
     ctx.restore();
   }
 
-  // ── 안개: 디더 망점 띠 (버퍼 좌표) ──
+  // ── 안개: 부드러운 계단식 반투명 덩어리 (버퍼 좌표) ──
   drawFog(ctx, renderer, time) {
     if (!this.ambient.fog) return;
     const tint = mix('#c8c4d8', this.ambient.tint || '#9090a0', 0.4);
@@ -151,14 +150,14 @@ export class Lighting {
       for (let y = 0; y < T / 2; y++) for (let x = 0; x < T; x++) {
         const dx = (x - T / 2) / (T / 2), dy = (y - T / 4) / (T / 4), f = 1 - Math.sqrt(dx * dx + dy * dy);
         if (f <= 0) continue;
-        if (bayer(x, y) < f * 0.32) { const i = (y * T + x) * 4; d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = 255; }
+        const i = (y * T + x) * 4; d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = Math.ceil(f * 4) * 22;
       }
       c.putImageData(img, 0, 0);
       this.fogTex = t; this.fogKey = tint;
     }
     const cam = renderer.camera;
     ctx.save();
-    ctx.globalAlpha = 0.2;
+    ctx.globalAlpha = 0.35;
     const cellW = 300, cellH = 150;
     for (let layer = 0; layer < 2; layer++) {
       const ox = -(((cam.x * (0.9 + layer * 0.2) + time * (7 + layer * 5)) % cellW) + cellW) % cellW;
@@ -218,9 +217,13 @@ export class Lighting {
       ctx.globalAlpha = type === 'dust' ? 0.5 : type === 'ash' ? 0.75 : 1;
       ctx.fillStyle = p.color;
       ctx.fillRect(x, y, p.size, p.size);
-      if (type === 'fireflies' || (type === 'soul' && p.size > 1)) {
-        ctx.globalAlpha = 0.45;
-        ctx.fillRect(x - 1, y, 1, 1); ctx.fillRect(x + p.size, y, 1, 1); ctx.fillRect(x, y - 1, 1, 1); ctx.fillRect(x, y + p.size, 1, 1);
+      // 반짝이: 십자 빛살 (주기적으로 길어짐) + 흰 코어
+      const tw = Math.sin(time * 5 + p.seed * 40);
+      if (type === 'fireflies' || type === 'soul' || (type === 'embers' && tw > 0.6)) {
+        const L = tw > 0.75 ? 2 : 1;
+        ctx.globalAlpha = 0.5;
+        ctx.fillRect(x - L, y, L, 1); ctx.fillRect(x + p.size, y, L, 1); ctx.fillRect(x, y - L, 1, L); ctx.fillRect(x, y + p.size, 1, L);
+        if (tw > 0.75) { ctx.globalAlpha = 1; ctx.fillStyle = '#ffffff'; ctx.fillRect(x, y, 1, 1); }
       }
     }
     ctx.globalAlpha = 1;

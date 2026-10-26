@@ -42,7 +42,10 @@ export const HELMS = {
 export const BOOTS = { boots_leather: '#4a321c', boots_iron: '#7a7e86' };
 
 const SKIN_DEFAULT = '#e8c4a0';
-export const BODY_K = 0.8, HEAD_K = 1.3;
+// 내부 구분선: 반투명 남보라 → 아래 색과 섞여 '같은 계열의 한두 단계 어두운 선'이 된다 (실루엣 밖 부분은 알파 컷으로 제거)
+export const INLINE = 'rgba(40,14,52,0.5)';
+// ★v2 비율: 3.5~4등신, 키 약 54px(1×)
+export const BODY_K = 1.0, HEAD_K = 1.12;
 
 // 애니메이션 상태 → 정규화 포즈 파라미터
 export function poseOf(state, k) {
@@ -77,7 +80,7 @@ export function drawRig(ctx, ox, oy, dir, pose, st) {
   const a = dir * Math.PI / 4;
   const F = { x: Math.sin(a), y: -Math.cos(a) };
   const R = { x: Math.cos(a), y: Math.sin(a) };
-  // 고전 도트 비율: 몸은 짧게(×0.8), 머리는 크게(×1.3) → 약 2.5등신
+  // ★v2 비율: 몸 ×1.0, 머리 ×1.12 → 약 3.7등신
   const H = (st.height ?? 1) * BODY_K, Wd = st.width ?? 1;
   const hunch = st.hunch ?? 0;
   const bob = pose.walk ? Math.abs(Math.sin(pose.phase)) * 1.4 : pose.breath * 0.35;
@@ -85,7 +88,7 @@ export function drawRig(ctx, ox, oy, dir, pose, st) {
   const floatZ = st.float ? 6 + Math.sin(pose.phase || pose.breath) * 1.5 : 0;
   const P = (s, f, z) => [ox + R.x * s + F.x * (f - lean), oy + (R.y * s + F.y * (f - lean)) * 0.5 - z - floatZ];
   const D = (s, f) => R.y * s + F.y * f;
-  const outline = st.outline ?? '#22161c';
+  const outline = st.outline ?? INLINE;
   const limbW = st.limbW ?? 4.6;
   const parts = [];
   const front = F.y > -0.25; // 얼굴 보임
@@ -128,8 +131,15 @@ export function drawRig(ctx, ox, oy, dir, pose, st) {
       const rc = st.robe || st.body;
       ctx.fillStyle = rc; ctx.fill(); ctx.strokeStyle = outline; ctx.lineWidth = 1; ctx.stroke();
       ctx.save(); ctx.clip();
-      ctx.fillStyle = shade(rc, -0.28); ctx.fillRect(ox + flare * 0.25, oy - 60, flare * 2, 70);
-      ctx.fillStyle = shade(rc, 0.14); ctx.fillRect(ox - flare - 1, oy - 60, flare * 0.35, 70);
+      ctx.fillStyle = vgrad(ctx, ox - flare, waist[1], ox + flare, oy, rc); ctx.fillRect(ox - flare - 2, waist[1] - 2, flare * 2 + 4, oy - waist[1] + 4);
+      // 의상 주름: 밑단으로 퍼지는 어두운 골 + 밝은 능선
+      for (let i = -2; i <= 2; i++) {
+        const fx0 = waist[0] + i * waW * 0.4, fx1 = ox + i * flare * 0.42 + swing;
+        ctx.strokeStyle = rgba(shade(rc, -0.45), 0.7); ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(fx0, waist[1] + 3); ctx.lineTo(fx1, oy - hem - floatZ); ctx.stroke();
+        ctx.strokeStyle = rgba(shade(rc, 0.3), 0.45);
+        ctx.beginPath(); ctx.moveTo(fx0 - 1, waist[1] + 5); ctx.lineTo(fx1 - 1.2, oy - hem - floatZ - 1); ctx.stroke();
+      }
       ctx.restore();
       if (st.float) { // 흩어지는 밑단
         ctx.fillStyle = rgba(rc, 0.5);
@@ -144,12 +154,13 @@ export function drawRig(ctx, ox, oy, dir, pose, st) {
     ctx.lineTo(waist[0] + waW, waist[1]);
     ctx.lineTo(waist[0] - waW, waist[1]);
     ctx.closePath();
-    ctx.fillStyle = st.body; ctx.fill();
+    ctx.fillStyle = vgrad(ctx, chest[0] - shW, chest[1], chest[0] + shW, waist[1], st.body);
+    ctx.fill();
     ctx.strokeStyle = outline; ctx.lineWidth = 1; ctx.stroke();
     ctx.save(); ctx.clip();
-    // 플랫 3단 명암: 왼쪽 하이라이트 / 기본 / 오른쪽 그림자
-    ctx.fillStyle = shade(st.body, 0.16); ctx.fillRect(chest[0] - shW - 1, chest[1] - 4, shW * 0.45, 40);
-    ctx.fillStyle = shade(st.body, -0.3); ctx.fillRect(chest[0] + shW * 0.35, chest[1] - 4, shW * 2, 40);
+    // 아래로 갈수록 살짝 어둡게(허리 그늘) + 가장자리 반사광
+    ctx.fillStyle = 'rgba(30,10,50,0.16)'; ctx.fillRect(chest[0] - shW - 2, waist[1] - 3, shW * 2 + 4, 4);
+    ctx.fillStyle = rgba(shade(st.body, 0.35), 0.5); ctx.fillRect(chest[0] - shW - 1, chest[1], 1.2, waist[1] - chest[1]);
     torsoDetail(ctx, chest, waist, shW, waW, st, F, R, front);
     ctx.restore();
     // 허리띠
@@ -218,6 +229,12 @@ export function drawRig(ctx, ox, oy, dir, pose, st) {
   for (const p of parts) p.draw();
 }
 
+// 좌상단 빛 그라데이션 (밝음→기본→그늘). 톤 매핑에서 여러 단으로 양자화된다
+function vgrad(ctx, x0, y0, x1, y1, c) {
+  const g = ctx.createLinearGradient(x0, y0, x1, y1 + (y1 - y0) * 0.3);
+  g.addColorStop(0, shade(c, 0.34)); g.addColorStop(0.3, shade(c, 0.1)); g.addColorStop(0.62, shade(c, -0.18)); g.addColorStop(1, shade(c, -0.46));
+  return g;
+}
 function swingAngle(k) {
   // 0..0.3 들어올림(120°), 0.3..0.62 내려베기(-45°), 이후 복귀(60°)
   if (k < 0.3) return 62 + (125 - 62) * (k / 0.3);
@@ -247,10 +264,14 @@ function bone2(ctx, a, b, c, w, color, outline, isBone) {
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   ctx.strokeStyle = outline; ctx.lineWidth = w + 1.6;
   ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(c[0], c[1]); ctx.stroke();
-  ctx.strokeStyle = color; ctx.lineWidth = w;
+  ctx.strokeStyle = shade(color, -0.34); ctx.lineWidth = w;
   ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(c[0], c[1]); ctx.stroke();
-  ctx.strokeStyle = shade(color, 0.18); ctx.lineWidth = Math.max(1, w * 0.3);
-  ctx.beginPath(); ctx.moveTo(a[0] - w * 0.2, a[1]); ctx.lineTo(b[0] - w * 0.2, b[1]); ctx.stroke();
+  ctx.strokeStyle = color; ctx.lineWidth = w * 0.7;
+  ctx.beginPath(); ctx.moveTo(a[0] - w * 0.15, a[1]); ctx.lineTo(b[0] - w * 0.15, b[1]); ctx.lineTo(c[0] - w * 0.15, c[1]); ctx.stroke();
+  ctx.strokeStyle = shade(color, 0.3); ctx.lineWidth = Math.max(1, w * 0.28);
+  ctx.beginPath(); ctx.moveTo(a[0] - w * 0.3, a[1]); ctx.lineTo(b[0] - w * 0.3, b[1]); ctx.lineTo(c[0] - w * 0.3, c[1] - 0.5); ctx.stroke();
+  // 관절 주름
+  ctx.fillStyle = rgba(shade(color, -0.4), 0.6); ctx.fillRect(b[0] - w * 0.3, b[1] - 0.5, w * 0.6, 1);
 }
 
 function torsoDetail(ctx, chest, waist, shW, waW, st, F, R, front) {
@@ -263,7 +284,8 @@ function torsoDetail(ctx, chest, waist, shW, waW, st, F, R, front) {
     ctx.strokeStyle = 'rgba(20,24,30,0.45)'; ctx.lineWidth = 0.8;
     for (let y = y0 + 2, k = 0; y < y1; y += 2.6, k++) for (let x = x0 + (k % 2) * 1.6; x < x1; x += 3.2) { ctx.beginPath(); ctx.arc(x, y, 1.6, 0, Math.PI); ctx.stroke(); }
   } else if (st.pattern === 'plate') {
-    ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fillRect(chest[0] - shW * 0.55 + F.x * 1.5, y0 + 3, shW * 0.4, (y1 - y0) * 0.6);
+    ctx.fillStyle = 'rgba(255,250,230,0.3)'; ctx.fillRect(chest[0] - shW * 0.6 + F.x * 1.5, y0 + 3, shW * 0.45, (y1 - y0) * 0.6);
+    ctx.fillStyle = 'rgba(255,255,245,0.85)'; ctx.fillRect(chest[0] - shW * 0.5 + F.x * 1.5, y0 + 4, 1.2, 2.2); // 반짝 점
     ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 0.8;
     ctx.beginPath(); ctx.moveTo(x0, y0 + (y1 - y0) * 0.62); ctx.lineTo(x1, y0 + (y1 - y0) * 0.62); ctx.stroke();
     if (front) { ctx.beginPath(); ctx.moveTo(chest[0] + F.x * 2, y0 + 2); ctx.lineTo(waist[0] + F.x * 2, y1); ctx.stroke(); }
@@ -275,6 +297,16 @@ function torsoDetail(ctx, chest, waist, shW, waW, st, F, R, front) {
     ctx.strokeStyle = '#d8ceb4'; ctx.lineWidth = 1.2;
     for (let i = 0; i < 4; i++) { const y = y0 + 4 + i * 3; ctx.beginPath(); ctx.moveTo(chest[0] - shW * 0.8, y); ctx.quadraticCurveTo(chest[0], y + 1.5, chest[0] + shW * 0.8, y); ctx.stroke(); }
     line(ctx, chest[0], y0 + 2, waist[0], y1, 1.6, '#d8ceb4');
+  } else if (!st.pattern && !st.bone) {
+    if (front) { // 깃 (V 넥) + 단추
+      ctx.fillStyle = rgba(shade(st.body, -0.5), 0.8);
+      ctx.beginPath(); ctx.moveTo(chest[0] + F.x * 2 - 2.5, y0 + 1); ctx.lineTo(chest[0] + F.x * 2, y0 + 5); ctx.lineTo(chest[0] + F.x * 2 + 2.5, y0 + 1); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = rgba(shade(st.body, 0.4), 0.9); ctx.fillRect(chest[0] + F.x * 2 - 0.5, y0 + 7, 1, 1); ctx.fillRect(chest[0] + F.x * 2 - 0.5, y0 + 10, 1, 1);
+    }
+    ctx.strokeStyle = rgba(shade(st.body, -0.45), 0.6); ctx.lineWidth = 0.9;
+    ctx.beginPath(); ctx.moveTo(chest[0] - shW * 0.2, y0 + 5); ctx.lineTo(waist[0] - waW * 0.45, y1 - 1);
+    ctx.moveTo(chest[0] + shW * 0.45, y0 + 4); ctx.lineTo(waist[0] + waW * 0.2, y1 - 1); ctx.stroke();
+    if (st.rags) { ctx.fillStyle = 'rgba(0,0,0,0.25)'; for (let i = 0; i < 4; i++) ctx.fillRect(x0 + (i * 7.3) % (x1 - x0), y0 + ((i * 5.1) % (y1 - y0)), 2.5, 3.5); }
   } else if (st.rags) {
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     for (let i = 0; i < 4; i++) ctx.fillRect(x0 + (i * 7.3) % (x1 - x0), y0 + ((i * 5.1) % (y1 - y0)), 2.5, 3.5);
@@ -415,11 +447,9 @@ function drawHead(ctx, c, r, st, F, R, front, outline, pose) {
   };
   // 플랫 2~3단 명암 구 (그림자 초승달 + 하이라이트 점)
   const ball = (color, rx = r, ry = r) => {
-    ctx.fillStyle = shade(color, -0.24); ellipse(ctx, x, y, rx, ry); ctx.fill();
-    ctx.save(); ellipse(ctx, x, y, rx, ry); ctx.clip();
-    ctx.fillStyle = color; ellipse(ctx, x - rx * 0.2, y - ry * 0.18, rx * 0.96, ry * 0.94); ctx.fill();
-    ctx.fillStyle = shade(color, 0.2); ellipse(ctx, x - rx * 0.42, y - ry * 0.5, rx * 0.32, ry * 0.22); ctx.fill();
-    ctx.restore();
+    const g = ctx.createRadialGradient(x - rx * 0.38, y - ry * 0.42, 0.5, x, y, Math.max(rx, ry) * 1.15);
+    g.addColorStop(0, shade(color, 0.28)); g.addColorStop(0.45, color); g.addColorStop(0.85, shade(color, -0.22)); g.addColorStop(1, shade(color, -0.38));
+    ctx.fillStyle = g; ellipse(ctx, x, y, rx, ry); ctx.fill();
     ellipse(ctx, x, y, rx, ry); ctx.strokeStyle = outline; ctx.lineWidth = 1; ctx.stroke();
   };
   switch (st.head) {
@@ -539,11 +569,22 @@ function drawHelm(ctx, x, y, r, Hm, F, R, outline, front) {
 
 // 머리 모양 0..5: 짧은 머리, 긴 머리, 묶은 머리, 뻗친 머리, 단발, 땋은 머리
 const capHair = (ctx, x, y, r, c, F, outline, depth = 0.25) => {
-  ctx.fillStyle = c;
+  const g = ctx.createRadialGradient(x - r * 0.4, y - r * 0.8, 0.5, x, y - r * 0.2, r * 1.3);
+  g.addColorStop(0, shade(c, 0.3)); g.addColorStop(0.5, c); g.addColorStop(1, shade(c, -0.35));
+  ctx.fillStyle = g;
   ctx.beginPath(); ctx.arc(x - F.x * 0.6, y - 0.4, r * 1.04, Math.PI * (1 - depth * 0.3), Math.PI * (2 + depth * 0.3)); ctx.closePath(); ctx.fill();
   ctx.strokeStyle = outline; ctx.lineWidth = 0.8; ctx.stroke();
-  ctx.fillStyle = shade(c, 0.22); ellipse(ctx, x - r * 0.35, y - r * 0.65, r * 0.4, r * 0.18); ctx.fill();
+  hairStrands(ctx, x - F.x * 0.6, y - 0.4, r * 1.04, c);
 };
+// 머리카락 결: 정수리에서 내려오는 어두운 결 + 빛 받는 고리(엔젤링)
+function hairStrands(ctx, x, y, r, c) {
+  ctx.save(); ctx.beginPath(); ctx.arc(x, y, r, Math.PI, Math.PI * 2); ctx.closePath(); ctx.clip();
+  ctx.strokeStyle = rgba(shade(c, -0.45), 0.75); ctx.lineWidth = 0.8;
+  for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(x + i * r * 0.18, y - r * 0.95); ctx.quadraticCurveTo(x + i * r * 0.45, y - r * 0.5, x + i * r * 0.62, y); ctx.stroke(); }
+  ctx.strokeStyle = rgba(shade(c, 0.45), 0.85); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(x - r * 0.1, y - r * 0.1, r * 0.62, Math.PI * 1.12, Math.PI * 1.5); ctx.stroke();
+  ctx.restore();
+}
 const backFull = (ctx, x, y, r, c, F, outline) => {
   if (F.y > -0.25) return;
   ctx.fillStyle = c; ellipse(ctx, x, y + 0.5, r * 1.02, r * 1.05); ctx.fill(); ctx.strokeStyle = outline; ctx.lineWidth = 0.8; ctx.stroke();
@@ -579,7 +620,7 @@ export const HUMANOID_BODIES = {
   knight_dark:  { head: 'knight', helmColor: '#2a2430', body: '#2c2434', sleeve: '#2a2232', leg: '#241e2c', trim: '#a02838', boots: '#1e1a24', weapon: 'dark_great', pattern: 'plate', pauldron: '#3a2e44', eyeGlow: '#ff3040', horns: true, gauntlet: true, height: 1.1, bulk: 1.1, glow: '#ff3a4a', cape: '#5a1a24' },
   lich:         { head: 'hood', hoodColor: '#2a1a34', face: 'skull', skin: '#c8c0a8', body: '#2a1a34', sleeve: '#2a1a34', leg: '#1a1020', trim: '#a060ff', boots: '#1a1020', weapon: 'staff', robe: '#2a1a34', robeFull: true, float: true, eyeGlow: '#c070ff', handColor: '#c8c0a8', height: 1.1, crown: '#8a6aaa' },
   dusk_king:    { head: 'knight', helmColor: '#1a1418', crownHelm: true, crown: '#b08a3a', body: '#1e1820', sleeve: '#1a141c', leg: '#141016', trim: '#ff3a3a', boots: '#100c12', weapon: 'dark_great', pattern: 'plate', pauldron: '#2a2028', eyeGlow: '#ff2a2a', gauntlet: true, height: 1.2, bulk: 1.25, glow: '#ff2a2a', cape: '#3a0a12', robe: '#1a1018' },
-  golem:        { head: 'golem', skin: '#7a766c', body: '#6e6a60', sleeve: '#6e6a60', leg: '#625e56', trim: '#4a4640', boots: '#5a564e', bulk: 1.6, taper: 0.85, limbW: 8, height: 1.15, headR: 6, headScale: 1, handColor: '#7a766c', gauntlet: true, eyeGlow: '#7fd8ff', outline: 'rgba(20,18,16,0.7)' },
+  golem:        { head: 'golem', skin: '#7a766c', body: '#6e6a60', sleeve: '#6e6a60', leg: '#625e56', trim: '#4a4640', boots: '#5a564e', bulk: 1.6, taper: 0.85, limbW: 8, height: 1.15, headR: 6, headScale: 1, handColor: '#7a766c', gauntlet: true, eyeGlow: '#7fd8ff' },
   cultist:      { head: 'hood', hoodColor: '#3a1418', skin: '#d8b090', body: '#3a1418', sleeve: '#3a1418', leg: '#1a0a0c', trim: '#a02030', boots: '#1a0a0c', robe: '#2e1014', weapon: 'dagger', eyeGlow: '#ff5040' },
 };
 

@@ -1,9 +1,9 @@
-// 타이틀 배경(도트 풍경): 달빛 아래 황혼의 탑과 묘지 실루엣, 망점 안개, 떠오르는 혼불.
-// 화면의 1/3 해상도로 그리고 도트화(명암 단계 + 베이어 디더) → 최근접 확대. 소유: 워커 A.
+// 타이틀 배경(도트 풍경): 달빛 아래 황혼의 탑과 묘지 실루엣, 계단식 반투명 안개, 떠오르는 혼불.
+// 화면의 1/2 해상도로 그리고 하이컬러 톤 매핑(휴 시프트, 디더 없음) → 최근접 확대. 소유: 워커 A.
 import { makeCanvas, hash2 } from './util.js';
-import { pixelize, bayer } from './pixel.js';
+import { pixelize } from './pixel.js';
 
-const TS = 3; // 타이틀 도트 배율
+const TS = 2; // 타이틀 도트 배율
 
 export class TitleScene {
   constructor(renderer) { this.r = renderer; this.bg = null; this.fg = null; this.souls = []; this.w = 0; this.h = 0; }
@@ -26,26 +26,31 @@ export class TitleScene {
     }
     // 달
     const mx = w * 0.72, my = h * 0.26, mr = Math.min(w, h) * 0.09;
-    // 달무리: 동심 3단 플랫 링
-    for (const [k, col] of [[2.6, 'rgba(255,210,190,0.10)'], [1.9, 'rgba(255,210,190,0.14)'], [1.4, 'rgba(255,220,200,0.2)']]) { c.fillStyle = col; c.beginPath(); c.arc(mx, my, mr * k, 0, Math.PI * 2); c.fill(); }
+    // 달무리: 동심 5단 따뜻한 반투명 링
+    for (const [k, col] of [[2.8, 'rgba(255,150,160,0.05)'], [2.3, 'rgba(255,170,160,0.06)'], [1.85, 'rgba(255,190,170,0.08)'], [1.45, 'rgba(255,210,180,0.12)'], [1.18, 'rgba(255,230,200,0.18)']]) { c.fillStyle = col; c.beginPath(); c.arc(mx, my, mr * k, 0, Math.PI * 2); c.fill(); }
     c.fillStyle = '#e8b8a0'; c.beginPath(); c.arc(mx, my, mr, 0, Math.PI * 2); c.fill();
     c.fillStyle = '#fff0e0'; c.beginPath(); c.arc(mx - mr * 0.12, my - mr * 0.12, mr * 0.86, 0, Math.PI * 2); c.fill();
     c.fillStyle = 'rgba(160,110,100,0.25)';
     for (const [dx, dy, r] of [[-0.3, -0.1, 0.2], [0.25, 0.3, 0.15], [0.1, -0.4, 0.1]]) { c.beginPath(); c.arc(mx + dx * mr, my + dy * mr, r * mr, 0, Math.PI * 2); c.fill(); }
     // 먼 산
-    ridge(c, w, h, h * 0.62, 22, '#2a1a30', 11);
-    ridge(c, w, h, h * 0.7, 14, '#1a1020', 23);
+    ridge(c, w, h, h * 0.62 - 1, 22, '#7a4a6a', 11);   // 달빛 받은 능선
+    ridge(c, w, h, h * 0.62, 22, '#3a2448', 11);
+    ridge(c, w, h, h * 0.7 - 1, 14, '#5a3450', 23);
+    ridge(c, w, h, h * 0.7, 14, '#241634', 23);
     // 황혼의 탑
     const tx = w * 0.3, base = h * 0.66, th = h * 0.42, tw = Math.max(9, w * 0.03);
-    c.fillStyle = '#0c070e';
+    c.fillStyle = '#1a1228';
     c.beginPath(); c.moveTo(tx - tw * 1.2, base); c.lineTo(tx - tw * 0.8, base - th); c.lineTo(tx - tw * 1.1, base - th - 2); c.lineTo(tx - tw * 0.5, base - th - 4);
     c.lineTo(tx - tw * 0.3, base - th - 14); c.lineTo(tx, base - th - 24); c.lineTo(tx + tw * 0.3, base - th - 14); c.lineTo(tx + tw * 0.5, base - th - 4);
     c.lineTo(tx + tw * 1.1, base - th - 2); c.lineTo(tx + tw * 0.8, base - th); c.lineTo(tx + tw * 1.2, base); c.closePath(); c.fill();
-    for (let i = 0; i < 5; i++) { const wy = base - th * (0.2 + i * 0.17); c.fillStyle = i === 4 ? '#ff3a3a' : 'rgba(255,90,60,0.6)'; c.fillRect(tx - 1, wy, 2, 3); }
+    // 달 쪽(오른쪽) 가장자리 반사광
+    c.fillStyle = '#4a3050'; c.fillRect(tx + tw * 0.62, base - th, 2, th);
+    for (let i = 0; i < 5; i++) { const wy = base - th * (0.2 + i * 0.17); c.fillStyle = i === 4 ? '#ff3a3a' : 'rgba(255,90,60,0.6)'; c.fillRect(tx - 1, wy, 2, 3); c.fillStyle = '#ffd080'; c.fillRect(tx, wy + 1, 1, 1); }
     // 앞 언덕 + 묘지
     const f = this.fg.getContext('2d');
-    ridge(f, w, h, h * 0.8, 9, '#0a060a', 41);
-    f.fillStyle = '#050305';
+    ridge(f, w, h, h * 0.8 - 1, 9, '#3a2440', 41);
+    ridge(f, w, h, h * 0.8, 9, '#140c1e', 41);
+    f.fillStyle = '#100a1a';
     for (let i = 0; i < 16; i++) {
       const x = hash2(i, 9) * w, y = h * 0.8 + hash2(i, 10) * h * 0.12, s = 0.25 + hash2(i, 11) * 0.3;
       if (hash2(i, 12) < 0.5) { f.fillRect(x - 2 * s, y - 30 * s, 4 * s, 30 * s); f.fillRect(x - 10 * s, y - 23 * s, 20 * s, 4 * s); }
@@ -54,8 +59,8 @@ export class TitleScene {
     // 앙상한 나무
     tree(f, w * 0.88, h * 0.86, h * 0.32);
     tree(f, w * 0.06, h * 0.9, h * 0.26);
-    pixelize(this.bg, { outline: false, levels: 14, alphaCut: 1, dither: true });
-    pixelize(this.fg, { outline: false, levels: 0, alphaCut: 100 });
+    pixelize(this.bg, { outline: false, levels: 26, alphaCut: 1 });
+    pixelize(this.fg, { outline: false, tone: false, alphaCut: 100 });
   }
 
   render(ctx, dt, time) {
@@ -64,7 +69,7 @@ export class TitleScene {
     b.setTransform(1, 0, 0, 1, 0, 0);
     b.globalAlpha = 1; b.globalCompositeOperation = 'source-over';
     if (this.bg) b.drawImage(this.bg, 0, 0);
-    // 안개 띠: 베이어 망점 (반투명 그라데이션 대신). 띠는 미리 구워 두고 가로로 흘린다
+    // 안개 띠: 계단식 반투명 (미리 구워 두고 가로로 흘린다)
     if (!this.fogBands) this.fogBands = [0, 1, 2].map((i) => fogBand(w, i));
     this.fogBands.forEach((band, i) => {
       const off = Math.floor(time * (4 + i * 3)) % w;
@@ -92,15 +97,15 @@ export class TitleScene {
 // 안개 띠 1개 (가로 2배 폭, 주기 w 로 이어짐)
 function fogBand(w, i) {
   const c = makeCanvas(w * 2, 21), g = c.getContext('2d');
-  g.fillStyle = i === 2 ? '#3a3050' : '#4a4060';
+  g.fillStyle = i === 2 ? '#6a5a8a' : '#8a7aa8';
   for (let yy = -6; yy <= 6; yy++) {
-    const dens = (1 - Math.abs(yy) / 7) * (0.25 + i * 0.08);
+    g.globalAlpha = Math.ceil((1 - Math.abs(yy) / 7) * 4) / 4 * (0.1 + i * 0.03);
     for (let x = 0; x < w * 2; x++) {
       const wave = Math.round(Math.sin(((x % w) / w) * Math.PI * 2 * Math.max(1, Math.round(w * 0.05 / (Math.PI * 2))) + i) * 3);
-      const y = 10 + yy + wave;
-      if (bayer(x % w, y) < dens) g.fillRect(x, y, 1, 1);
+      g.fillRect(x, 10 + yy + wave, 1, 1);
     }
   }
+  g.globalAlpha = 1;
   return c;
 }
 
@@ -113,7 +118,7 @@ function ridge(c, w, h, y, amp, color, seed) {
   c.lineTo(w, h); c.closePath(); c.fill();
 }
 function tree(c, x, y, H) {
-  c.strokeStyle = '#050305'; c.lineCap = 'round';
+  c.strokeStyle = '#120a1c'; c.lineCap = 'round';
   const br = (x0, y0, a, len, wd, d) => {
     const x1 = x0 + Math.sin(a) * len, y1 = y0 - Math.cos(a) * len;
     c.lineWidth = wd; c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke();

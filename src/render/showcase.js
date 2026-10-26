@@ -124,7 +124,7 @@ export class Showcase {
       const fake = { groundAt: (x, y) => (x >= 0 && y >= 0 && x < 3 && y < 3 ? id : (i % 2 ? 'grass' : 'void')), objAt: () => null };
       for (let s = 0; s < 5; s++) for (let x = 0; x < 3; x++) { const y = s - x; if (y < 0 || y > 2) continue;
         const cx = ox + (x - y) * 32, cy = oy + (x + y) * 16;
-        drawGroundTile(ctx, id, cx, cy, x + i * 7, y, fake);
+        drawGroundTile(ctx, id, cx, cy, x, y, fake);
         drawGroundAnim(ctx, id, cx, cy, x, y, time);
       }
       text(ctx, id, ox, oy + 76, '#c8c0a0', 12);

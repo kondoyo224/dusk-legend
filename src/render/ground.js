@@ -1,8 +1,8 @@
-// 지면 청크 캐시: 8x8 타일 단위로 지면+평평한 오브젝트를 오프스크린 캔버스에 굽는다. 소유: 워커 A.
+// 지면 청크 캐시: 8x8 타일 단위로 지면(픽셀 셰이더, groundpx.js)+평평한 오브젝트를 오프스크린 캔버스에 1× 로 굽는다. 소유: 워커 A.
 import { tileToWorld } from '../core/iso.js';
 import { makeCanvas } from './util.js';
-import { pixelize } from './pixel.js';
-import { drawGroundTile, ANIMATED_GROUND, objectSprite, ANIMATED_OBJECTS, HW, HH, objectTop } from './tiles.js';
+import { ANIMATED_GROUND, objectSprite, ANIMATED_OBJECTS, HW, HH, objectTop } from './tiles.js';
+import { bakeGround, bakeCliffs } from './groundpx.js';
 
 const CS = 8;
 // 지면에 구워도 되는(엔티티보다 항상 아래) 오브젝트
@@ -41,29 +41,26 @@ export class GroundLayer {
 
   build(m) {
     const w = this.world;
-    const c = m.canvas || makeCanvas(m.maxX - m.minX, m.maxY - m.minY);
+    const W = m.maxX - m.minX, H = m.maxY - m.minY;
+    const c = m.canvas || makeCanvas(W, H);
     const ctx = c.getContext('2d');
     ctx.clearRect(0, 0, c.width, c.height);
-    ctx.save();
-    ctx.translate(-m.minX, -m.minY);
-    // 깊이 순서(x+y)로 그려야 절벽 면이 앞 타일에 덮인다
+    const img = ctx.createImageData(c.width, c.height);
+    const own = (gx, gy) => gx >= m.x0 && gx <= m.x1 && gy >= m.y0 && gy <= m.y1;
+    bakeGround(img, m.minX, m.minY, w, own);
     const tiles = [];
     for (let y = m.y0; y <= m.y1; y++) for (let x = m.x0; x <= m.x1; x++) tiles.push([x, y]);
+    bakeCliffs(img, m.minX, m.minY, w, tiles);
+    ctx.putImageData(img, 0, 0);
+    // 평평한 오브젝트(꽃·버섯·뼈 등)를 깊이 순으로
     tiles.sort((a, b) => a[0] + a[1] - b[0] - b[1]);
-    for (const [x, y] of tiles) {
-      const p = tileToWorld(x, y);
-      drawGroundTile(ctx, w.groundAt(x, y), p.x, p.y, x, y, w);
-    }
     for (const [x, y] of tiles) {
       const o = w.objAt(x, y);
       if (o && FLAT_OBJECTS.has(o)) {
         const p = tileToWorld(x, y), s = objectSprite(o, x, y, w);
-        ctx.drawImage(s.canvas, p.x - s.ax, p.y - s.ay);
+        ctx.drawImage(s.canvas, Math.round(p.x - s.ax - m.minX), Math.round(p.y - s.ay - m.minY));
       }
     }
-    ctx.restore();
-    // 도트화: 명암 단계 + 베이어 디더 (디더 격자는 월드 좌표 기준으로 정렬)
-    pixelize(c, { outline: false, alphaCut: 40, levels: 12, dither: true, ox: m.minX, oy: m.minY });
     m.canvas = c;
   }
 
@@ -90,6 +87,15 @@ export class GroundLayer {
     }
     out.sort((a, b) => a.i + a.j - b.i - b.j);
     return out;
+  }
+
+  // 곧 보일 청크(화면 주변 margin px)를 프레임당 n 개씩 미리 굽는다 → 걸어갈 때 끊김 방지
+  prefetch(vx0, vy0, vx1, vy1, margin = 260, n = 1) {
+    for (const m of this.visible(vx0 - margin, vy0 - margin, vx1 + margin, vy1 + margin)) {
+      if (m.canvas) continue;
+      this.build(m);
+      if (--n <= 0) return;
+    }
   }
 
   draw(ctx, list) {

@@ -6,8 +6,8 @@ import { drawBeast, BEAST_BODIES, FLYING } from './beasts.js';
 
 export { FLYING };
 export const ATTACK_T = 0.34, HURT_T = 0.28, CAST_T = 0.5, DEAD_T = 0.6;
-// 고전풍: 적은 프레임으로 끊어지는 애니메이션 (걷기 4, 공격 3)
-const FRAMES = { walk: 4, idle: 2, attack: 3, hurt: 2, cast: 3, dead: 4 };
+// ★v2: 걷기 6 / 공격 4 프레임
+const FRAMES = { walk: 6, idle: 2, attack: 4, hurt: 2, cast: 3, dead: 4 };
 // 반투명 몸(영체): 도트화 시 2단 알파 유지
 const SHEER = new Set(['shade', 'wraith']);
 // 몸 자체가 계속 움직이는(날갯짓·일렁임) 종류: 정지 상태에서도 순환 프레임
@@ -76,9 +76,10 @@ export function getSprite(look, dir, state, k, time = 0) {
   else if (BEAST_BODIES.has(body)) drawBeast(ctx, 0, 0, body, dir, pose, look, kk * 6.28);
   else drawRig(ctx, 0, 0, dir, pose, humanStyle(look));
   ctx.restore();
-  pixelize(c, { keepAlpha: SHEER.has(body) });
+  // 반투명 내부선(INLINE)은 실루엣 밖에서 알파 컷(150)으로 지워지고, 선택적 컬러 외곽선이 대신 둘러진다
+  pixelize(c, { keepAlpha: SHEER.has(body), alphaCut: SHEER.has(body) ? 110 : 150 });
   // 히트박스용 상단 높이(대략) — 고전 비율(짧은 몸 + 큰 머리)
-  const top = (BEAST_BODIES.has(body) ? (body === 'wolf' || body === 'boar' ? 30 : body === 'rat' ? 16 : body === 'spider' ? 22 : body === 'slime' ? 22 : body === 'bat' ? 44 : 52) : 52 * (st?.height ?? 1)) * sc;
+  const top = (BEAST_BODIES.has(body) ? (body === 'wolf' || body === 'boar' ? 30 : body === 'rat' ? 16 : body === 'spider' ? 22 : body === 'slime' ? 22 : body === 'bat' ? 44 : 52) : 56 * (st?.height ?? 1)) * sc;
   s = { canvas: c, ax, ay, top, w: W, h: H, sc };
   return cache.set(key, s);
 }

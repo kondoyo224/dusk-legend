@@ -19,7 +19,7 @@ import { drawShadow, pxEllipse, FONT_PIX, outlinedText } from './pixel.js';
 
 const GRADE_COLOR = { common: '#e8e4d8', uncommon: '#5fd35f', rare: '#4f9cff', epic: '#b46cff', legendary: '#ff9a2e' };
 const DEAD_LINGER = 1.4;   // 워커 B: 사망 후 1.4초 뒤 제거
-const ZOOMS = [0.75, 1, 1.25, 1.5];
+const ZOOMS = [1, 1.5, 2];  // 1× 기준 확대만 (축소는 도트가 깨짐)
 
 export class Renderer {
   constructor(game, canvas) {
@@ -27,7 +27,7 @@ export class Renderer {
     this.camera = { x: 0, y: 0, zoom: 1 };
     this.cam = this.camera; // 구버전 호환
     this.buf = makeCanvas(2, 2); this.bctx = this.buf.getContext('2d');
-    this.PIXEL_SCALE = 2; this.S = 2; this.bw = 2; this.bh = 2; this.ox = 0; this.oy = 0;
+    this.PIXEL_SCALE = 1; this.S = 1; this.bw = 2; this.bh = 2; this.ox = 0; this.oy = 0;
     this.ground = new GroundLayer();
     this.lighting = new Lighting();
     this.fx = new FX(this);
@@ -67,9 +67,8 @@ export class Renderer {
     const w = window.innerWidth, h = window.innerHeight;
     this.canvas.width = w; this.canvas.height = h;
     this.W = w; this.H = h;
-    // 창이 아주 크면 3배
-    // 휴대폰(짧은 변 < 520 CSS px)은 1배: 시야 확보(가로 약 12칸) — CSS 픽셀 자체가 기기 픽셀 2~3배라 도트는 여전히 굵게 보임
-    this.PIXEL_SCALE = Math.min(w, h) < 520 ? 1 : w * h > 2400 * 1350 ? 3 : 2;
+    // ART_STYLE ★v2: 1× 원본 해상도(화면 px = 도트 1개). 아주 큰 화면(QHD 이상)에서만 2배. 휴대폰도 1배.
+    this.PIXEL_SCALE = Math.min(w, h) >= 1300 && w * h > 2400 * 1300 ? 2 : 1;
     this.title.resize(w, h);
     this.fitBuffer();
   }
@@ -130,7 +129,7 @@ export class Renderer {
     const g = this.game, p = g.player;
     const inp = g.input;
     if (inp?.wheel && !g.ui?.isBlocking?.()) {
-      let i = ZOOMS.indexOf(this.camera.zoom); if (i < 0) i = 1;
+      let i = ZOOMS.indexOf(this.camera.zoom); if (i < 0) i = 0;
       this.camera.zoom = ZOOMS[clamp(i - Math.sign(inp.wheel), 0, ZOOMS.length - 1)];
     }
     if (!ZOOMS.includes(this.camera.zoom)) this.camera.zoom = ZOOMS.reduce((a, z) => (Math.abs(z - this.camera.zoom) < Math.abs(a - this.camera.zoom) ? z : a), 1);
@@ -187,6 +186,7 @@ export class Renderer {
     const vy0 = -oy - 32, vy1 = -oy + bh + 160;
     const chunks = this.ground.visible(vx0, vy0, vx1, vy1);
     this.ground.draw(b, chunks);
+    this.ground.prefetch(vx0, vy0, vx1, vy1);
     for (const m of chunks) {
       for (const a of m.anim) { const p = tileToWorld(a.x, a.y); if (p.x > vx0 && p.x < vx1 && p.y > vy0 && p.y < vy1) drawGroundAnim(b, a.id, p.x, p.y, a.x, a.y, time); }
       for (const a of m.flatAnim) { const p = tileToWorld(a.x, a.y); drawObjectAnim(b, a.id, p.x, p.y, a.x, a.y, time); }
@@ -279,7 +279,9 @@ export class Renderer {
     const send = (wx, wy) => {
       const s = this.worldToScreen(wx, wy);
       const cx = r.left + s.x * r.width / this.canvas.width, cy = r.top + s.y * r.height / this.canvas.height;
-      this.canvas.dispatchEvent(new MouseEvent('mousemove', { clientX: cx, clientY: cy, bubbles: true }));
+      // 입력은 pointer 이벤트 기반 (core/input.js)
+      const Ev = typeof PointerEvent === 'function' ? PointerEvent : MouseEvent;
+      this.canvas.dispatchEvent(new Ev('pointermove', { clientX: cx, clientY: cy, bubbles: true, pointerType: 'mouse', pointerId: 1 }));
       return g.input.mouse;
     };
     const p = g.player;
@@ -360,7 +362,7 @@ export class Renderer {
     // 그림자 (하드엣지)
     const sc = look.scale ?? 1;
     const flying = FLYING.has(look.body);
-    drawShadow(ctx, wx, wy + 1, (flying ? 8 : 11) * sc, (flying ? 3 : 4.5) * sc, flying ? 0.25 : 0.4);
+    drawShadow(ctx, wx, wy + 1, (flying ? 8 : 12) * sc, (flying ? 3 : 5) * sc, flying ? 0.32 : 0.58);
     const x = wx - spr.ax, y = wy - spr.ay;
     const hovered = this.hover === e, targeted = target === e;
     if (e.ghost) {

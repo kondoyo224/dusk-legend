@@ -1,20 +1,20 @@
-// 도트(픽셀아트) 공용 도구: 베이어 디더, 스프라이트 도트화 필터(알파 컷·명암 단계화·1px 외곽선),
+// 도트(픽셀아트) 공용 도구: 하이컬러 톤 매핑 필터(알파 컷·휴 시프트·선택적 컬러 외곽선·손 AA),
 // 하드엣지 타원/선, 그림자 스탬프, 비트맵 숫자 글꼴. 소유: 워커 A. (docs/ART_STYLE.md §2~4)
 import { makeCanvas, hexToRgb, LRU } from './util.js';
+import { toneMap, outlineOf } from './palette.js';
 
 // 4×4 베이어 행렬 (0..15)
 export const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
-const DZ = 0.3; // 디더 데드존
 export const bayer = (x, y) => (BAYER4[((y & 3) << 2) | (x & 3)] + 0.5) / 16; // (0,1)
 
 // UI·이름표용 고전 한글 글꼴
 export const FONT_PIX = '"굴림", Gulim, "돋움", Dotum, "Malgun Gothic", sans-serif';
 
 /**
- * 캔버스를 도트풍으로 변환한다 (제자리).
+ * 캔버스를 하이컬러 도트로 변환한다 (제자리). ART_STYLE ★v2
  *  - 알파: alphaCut 미만 → 투명, 이상 → 불투명 (keepAlpha 면 2단 반투명 유지)
- *  - 명암: sqrt-휘도를 levels 단계로 양자화 → 부드러운 그라데이션이 2~4단 플랫톤으로 (dither:true 면 단 경계에 베이어 디더)
- *  - 외곽선: 불투명 영역 바깥 1px 을 이웃 색을 어둡게 한 색(짙은 갈색/남색 계열)으로
+ *  - 톤: 명도를 levels 단계로 양자화(디더 없음) + 휴 시프트(그림자→남보라, 하이라이트→노랑/크림) + 채도 보정
+ *  - 외곽선(선택적 셀아웃): 이웃 색의 어두운 같은 계열. 빛 받는 쪽(위·왼쪽)은 옅게, 계단 모서리는 반투명 손 AA
  */
 export function pixelize(canvas, opt = {}) {
   const w = canvas.width, h = canvas.height;
@@ -23,64 +23,61 @@ export function pixelize(canvas, opt = {}) {
   const img = ctx.getImageData(0, 0, w, h);
   const d = img.data;
   const cut = opt.alphaCut ?? 110;
-  const levels = opt.levels ?? 11;
+  const levels = opt.levels ?? 18;
   const keepAlpha = !!opt.keepAlpha;
-  const dither = !!opt.dither; // 큰 그라데이션(지면·배경)만 디더, 스프라이트는 플랫 단 스냅
-  const ox = opt.ox ?? 0, oy = opt.oy ?? 0;
-  // 1차: 알파 컷 + sqrt-휘도 단계값 S 계산
-  const S = new Float32Array(w * h).fill(-1);
+  const tone = opt.tone !== false;
+  const o = [0, 0, 0];
   for (let p = 0, i = 0; p < w * h; p++, i += 4) {
     const a = d[i + 3];
     if (a < cut) {
-      // 그림자(어둡고 옅은 픽셀)는 하드엣지 반투명 단색으로 유지
-      if (opt.shadow && a >= 28 && d[i] + d[i + 1] + d[i + 2] < 90) { d[i] = 8; d[i + 1] = 6; d[i + 2] = 12; d[i + 3] = 92; }
+      // 그림자(어둡고 옅은 픽셀)는 채도 있는 남색 반투명 2단으로 유지
+      if (opt.shadow && a >= 24 && d[i] + d[i + 1] + d[i + 2] < 120) { d[i] = 20; d[i + 1] = 18; d[i + 2] = 52; d[i + 3] = a > 70 ? 96 : 56; }
       else d[i + 3] = 0;
       continue;
     }
     d[i + 3] = keepAlpha ? (a > 200 ? 255 : (opt.midAlpha ?? 150)) : 255;
-    if (levels <= 0) continue;
-    const L = (d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11) / 255;
-    if (L > 0.002) S[p] = Math.sqrt(L) * levels;
-  }
-  if (levels > 0) {
-    // 2차: 단색 면은 가장 가까운 단으로 스냅(망점 없음), 그라데이션 구간만 베이어 디더
-    const at = (x, y, v) => (x < 0 || y < 0 || x >= w || y >= h ? v : S[y * w + x] < 0 ? v : S[y * w + x]);
-    for (let y = 0, p = 0; y < h; y++) for (let x = 0; x < w; x++, p++) {
-      const s = S[p];
-      if (s < 0) continue;
-      const grad = Math.abs(at(x - 2, y, s) - at(x + 2, y, s)) + Math.abs(at(x, y - 2, s) - at(x, y + 2, s));
-      const fl = Math.floor(s), fr = s - fl;
-      let q;
-      if (!dither || grad < 0.04 || grad > 0.9) q = Math.round(s); // 단색 면·경계는 스냅
-      else q = fr < DZ ? fl : fr > 1 - DZ ? fl + 1 : fl + (bayer(x + ox, y + oy) < (fr - DZ) / (1 - 2 * DZ) ? 1 : 0);
-      const i = p * 4, L = (s / levels) * (s / levels);
-      const k = (q / levels) * (q / levels) / L;
-      d[i] = Math.min(255, d[i] * k); d[i + 1] = Math.min(255, d[i + 1] * k); d[i + 2] = Math.min(255, d[i + 2] * k);
-    }
+    if (!tone) continue;
+    toneMap(d[i], d[i + 1], d[i + 2], levels, o);
+    d[i] = o[0]; d[i + 1] = o[1]; d[i + 2] = o[2];
   }
   if (opt.outline !== false) outlinePass(d, w, h, opt.outlineColor);
   ctx.putImageData(img, 0, 0);
   return canvas;
 }
 
-// 투명 픽셀 중 불투명 이웃(4방향)이 있으면 외곽선 색으로 칠한다
+// 선택적 외곽선: 투명 픽셀 중 불투명 이웃(4방향)이 있으면 그 이웃의 어두운 같은 계열 색.
+// 빛(좌상단)을 받는 쪽 = 이웃이 오른쪽/아래에 있는 외곽 픽셀 → 옅게. 계단 모서리는 반투명 AA.
 function outlinePass(d, w, h, fixed) {
   const mask = new Uint8Array(w * h);
   for (let p = 0; p < w * h; p++) mask[p] = d[p * 4 + 3] >= 150 ? 1 : 0;
   const F = fixed ? hexToRgb(fixed) : null;
+  const o = [0, 0, 0];
+  const ol = new Uint8Array(w * h);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const p = y * w + x;
     if (mask[p]) continue;
-    let n = -1;
-    if (x > 0 && mask[p - 1]) n = p - 1;
-    else if (x < w - 1 && mask[p + 1]) n = p + 1;
-    else if (y > 0 && mask[p - w]) n = p - w;
-    else if (y < h - 1 && mask[p + w]) n = p + w;
+    let n = -1, soft = false;
+    if (y < h - 1 && mask[p + w]) { n = p + w; soft = true; }          // 위쪽 외곽 (빛 받음)
+    else if (x < w - 1 && mask[p + 1]) { n = p + 1; soft = true; }     // 왼쪽 외곽 (빛 받음)
+    else if (x > 0 && mask[p - 1]) n = p - 1;                          // 오른쪽 외곽 (그늘)
+    else if (y > 0 && mask[p - w]) n = p - w;                          // 아래쪽 외곽 (그늘)
     if (n < 0) continue;
     const i = p * 4, j = n * 4;
     if (F) { d[i] = F[0]; d[i + 1] = F[1]; d[i + 2] = F[2]; }
-    else { d[i] = 14 + d[j] * 0.22; d[i + 1] = 10 + d[j + 1] * 0.18; d[i + 2] = 18 + d[j + 2] * 0.24; }
+    else { outlineOf(d[j], d[j + 1], d[j + 2], soft, o); d[i] = o[0]; d[i + 1] = o[1]; d[i + 2] = o[2]; }
     d[i + 3] = 255;
+    ol[p] = 1;
+  }
+  // 손 AA: 외곽선 계단의 안쪽 모서리(두 직교 이웃이 외곽선)에 반투명 중간 픽셀
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    const p = y * w + x;
+    if (mask[p] || ol[p]) continue;
+    const L = ol[p - 1], Rr = ol[p + 1], U = ol[p - w], D = ol[p + w];
+    let n = -1;
+    if (L && U) n = p - 1; else if (Rr && U) n = p + 1; else if (L && D) n = p - 1; else if (Rr && D) n = p + 1;
+    if (n < 0) continue;
+    const i = p * 4, j = n * 4;
+    d[i] = d[j]; d[i + 1] = d[j + 1]; d[i + 2] = d[j + 2]; d[i + 3] = 110;
   }
 }
 
@@ -125,37 +122,44 @@ export function pxLine(ctx, x0, y0, x1, y1, color, w = 1) {
     if (e2 <= dx) { err += dx; y0 += sy; }
   }
 }
-// 디더(망점) 채운 마름모 — 반투명 대신 고전식 망점. 스탬프 캐시(크기·색·밀도별)
+// 반투명 마름모 (구 디더 망점 대체): density → 알파. 가장자리 1px 은 한 단계 옅게(부드러운 경계). 스탬프 캐시
 const diaCache = new Map();
 export function pxDitherDiamond(ctx, cx, cy, hw, hh, color, density = 0.5) {
   hw = Math.round(hw); hh = Math.round(hh);
   if (hw < 1 || hh < 1 || density <= 0) return;
   const dq = Math.round(density * 16) / 16;
-  const key = `${hw}|${hh}|${color}|${dq}`;
+  const key = `${hw}|${hh}|${color}`;
   let c = diaCache.get(key);
   if (!c) {
     c = makeCanvas(hw * 2 + 1, hh * 2 + 1);
     const g = c.getContext('2d');
-    g.fillStyle = color;
     for (let dy = -hh; dy <= hh; dy++) {
       const w = Math.round(hw * (1 - Math.abs(dy) / hh));
-      for (let dx = -w; dx <= w; dx++) if (bayer(dx + hw, dy + hh) < dq) g.fillRect(dx + hw, dy + hh, 1, 1);
+      g.fillStyle = color;
+      g.globalAlpha = 0.55; g.fillRect(hw - w, dy + hh, w * 2 + 1, 1);
+      if (w > 2) { g.globalAlpha = 1; g.clearRect(hw - w + 2, dy + hh, w * 2 - 3, 1); g.fillRect(hw - w + 2, dy + hh, w * 2 - 3, 1); }
     }
     if (diaCache.size > 400) diaCache.clear();
     diaCache.set(key, c);
   }
+  const a = ctx.globalAlpha;
+  ctx.globalAlpha = a * Math.min(1, dq * 0.9);
   ctx.drawImage(c, Math.round(cx) - hw, Math.round(cy) - hh);
+  ctx.globalAlpha = a;
 }
 
-// ── 그림자 스탬프 (하드엣지 반투명 타원, 캐시) ──
+// ── 접지 그림자 스탬프 (채도 있는 남색 반투명 타원, 가장자리 2단 페이드, 캐시) ──
 const shadowCache = new Map();
 export function shadowStamp(rx, ry, alpha = 0.38) {
   rx = Math.max(2, Math.round(rx)); ry = Math.max(1, Math.round(ry));
   const key = `${rx}|${ry}|${alpha}`;
   let c = shadowCache.get(key);
   if (c) return c;
-  c = makeCanvas(rx * 2 + 1, ry * 2 + 1);
-  pxFillEllipse(c.getContext('2d'), rx, ry, rx, ry, `rgba(8,6,12,${alpha})`);
+  c = makeCanvas(rx * 2 + 3, ry * 2 + 3);
+  const g = c.getContext('2d');
+  pxFillEllipse(g, rx + 1, ry + 1, rx + 1, ry + 1, `rgba(24,20,60,${(alpha * 0.35).toFixed(3)})`);
+  pxFillEllipse(g, rx + 1, ry + 1, rx, ry, `rgba(24,20,60,${(alpha * 0.4).toFixed(3)})`);
+  pxFillEllipse(g, rx + 1, ry + 1, Math.max(1, rx - 2), Math.max(1, ry - 1), `rgba(20,16,52,${(alpha * 0.55).toFixed(3)})`);
   shadowCache.set(key, c);
   return c;
 }
